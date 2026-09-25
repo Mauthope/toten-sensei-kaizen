@@ -17,7 +17,7 @@ export interface CameraDevice {
 export function usePersonDetection({
   onPersonEnter,
   onPersonLeave,
-  inactivityTimeoutMs = 3800
+  inactivityTimeoutMs = 15000
 }: UsePersonDetectionOptions = {}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -28,6 +28,9 @@ export function usePersonDetection({
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isSimulated, setIsSimulated] = useState(false);
+
+  const isSimulatedRef = useRef(false);
+  isSimulatedRef.current = isSimulated;
 
   // Camera selection state
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
@@ -58,16 +61,14 @@ export function usePersonDetection({
         }));
       setAvailableDevices(videoDevs);
     } catch (err) {
-      console.warn("Error enumerating devices:", err);
+      console.warn("Could not enumerate video devices:", err);
     }
   }, []);
 
-  // Stop camera tracks cleanly
+  // Stop current active stream tracks
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => {
-        track.stop();
-      });
+      streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
     }
     if (videoRef.current) {
@@ -76,19 +77,53 @@ export function usePersonDetection({
     setCameraActive(false);
   }, []);
 
-  // Initialize Camera with resilient fallback logic
-  const startCamera = useCallback(async () => {
-    try {
-      setCameraError(null);
-      stopCamera();
+  // Initialize and load TensorFlow.js COCO-SSD
+  useEffect(() => {
+    let isMounted = true;
 
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error("Seu navegador não suporta acesso à câmera (getUserMedia).");
+    async function loadModel() {
+      try {
+        setIsLoadingModel(true);
+        // Load TensorFlow dependencies dynamically
+        await import('@tensorflow/tfjs');
+        const cocoSsd = await import('@tensorflow-models/coco-ssd');
+        const loadedModel = await cocoSsd.load({
+          base: 'lite_mobilenet_v2' // Fast lightweight model for kiosk responsiveness
+        });
+
+        if (isMounted) {
+          modelRef.current = loadedModel;
+          setIsLoadingModel(false);
+        }
+      } catch (err) {
+        console.warn("Failed loading COCO-SSD model:", err);
+        if (isMounted) {
+          setIsLoadingModel(false);
+        }
       }
+    }
 
+    loadModel();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Request Camera Stream
+  const startCamera = useCallback(async () => {
+    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Navegador não suporta acesso à câmera (getUserMedia).");
+      return;
+    }
+
+    stopCamera();
+    setCameraError(null);
+
+    try {
       let stream: MediaStream | null = null;
 
-      // Strategy 1: If specific device selected
+      // Strategy 1: Specific deviceId if chosen
       if (selectedDeviceId) {
         try {
           stream = await navigator.mediaDevices.getUserMedia({
@@ -142,7 +177,6 @@ export function usePersonDetection({
           videoRef.current.onloadedmetadata = () => {
             resolve();
           };
-          // Timeout fallback in case event doesn't fire
           setTimeout(resolve, 1000);
         });
 
@@ -179,57 +213,21 @@ export function usePersonDetection({
     setSelectedDeviceId(''); // clear exact device id so facingMode takes precedence
   }, []);
 
-  // Select specific device ID
+  // Select exact physical device
   const selectDevice = useCallback((deviceId: string) => {
     setSelectedDeviceId(deviceId);
   }, []);
 
-  // Load TensorFlow & COCO-SSD Model on Mount
+  // Start camera on mount & change
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadModel() {
-      try {
-        setIsLoadingModel(true);
-        const tf = await import('@tensorflow/tfjs');
-        await tf.ready();
-        const cocoSsd = await import('@tensorflow-models/coco-ssd');
-        const loadedModel = await cocoSsd.load({
-          base: 'lite_mobilenet_v2' // Very fast and lightweight for Kiosks
-        });
-
-        if (isMounted) {
-          modelRef.current = loadedModel;
-          setIsLoadingModel(false);
-        }
-      } catch (err: any) {
-        console.error("Error loading TensorFlow / COCO-SSD model:", err);
-        if (isMounted) {
-          setIsLoadingModel(false);
-          setCameraError("Falha ao inicializar o motor de inteligência artificial.");
-        }
-      }
-    }
-
-    loadModel();
+    startCamera();
 
     return () => {
-      isMounted = false;
       stopCamera();
-      if (requestAnimationIdRef.current) {
-        cancelAnimationFrame(requestAnimationIdRef.current);
-      }
     };
-  }, [stopCamera]);
+  }, [startCamera, stopCamera]);
 
-  // Restart camera when facingMode or selectedDeviceId changes
-  useEffect(() => {
-    if (!isLoadingModel) {
-      startCamera();
-    }
-  }, [facingMode, selectedDeviceId, isLoadingModel, startCamera]);
-
-  // Listen to device connect/disconnect
+  // Listen for device connects/disconnects (e.g. plugging in USB webcam)
   useEffect(() => {
     if (typeof window !== 'undefined' && navigator.mediaDevices) {
       navigator.mediaDevices.ondevicechange = () => {
@@ -240,15 +238,16 @@ export function usePersonDetection({
 
   const lastDetectionsRef = useRef<any[]>([]);
 
-  // Detection Loop with Throttling
+  // Continuous Camera Rendering Loop & Throttled Detection
+  // CRITICAL: NEVER terminates when in simulation mode! Live video frame drawing to canvas always continues!
   useEffect(() => {
-    if (!cameraActive || !modelRef.current || !videoRef.current || isSimulated) {
+    if (!cameraActive || !videoRef.current) {
       return;
     }
 
     let isRunning = true;
     let lastInferenceTime = 0;
-    const INFERENCE_INTERVAL_MS = 180; // ~5.5 fps inference is super smooth and saves 85% CPU
+    const INFERENCE_INTERVAL_MS = 180; // ~5.5 fps inference saves 85% CPU while staying responsive
 
     const runDetection = async (time: number) => {
       if (!isRunning) return;
@@ -257,16 +256,24 @@ export function usePersonDetection({
       const model = modelRef.current;
       const canvas = canvasRef.current;
 
-      if (video && video.readyState >= 2 && !video.paused) {
-        // 1. Draw live camera frame and HUD overlay to canvas
+      if (video && video.readyState >= 2) {
+        // Ensure video is not paused
+        if (video.paused) {
+          video.play().catch(() => {});
+        }
+
+        // 1. ALWAYS Draw live camera frame and HUD overlay to canvas
         if (canvas) {
           const ctx = canvas.getContext('2d');
           if (ctx) {
-            if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-              canvas.width = video.videoWidth || 640;
-              canvas.height = video.videoHeight || 480;
+            const vWidth = video.videoWidth || 640;
+            const vHeight = video.videoHeight || 480;
+            if (canvas.width !== vWidth || canvas.height !== vHeight) {
+              canvas.width = vWidth;
+              canvas.height = vHeight;
             }
-            // Draw real video frame
+            
+            // Draw real live video frame
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             // Tech center reticle
@@ -307,8 +314,8 @@ export function usePersonDetection({
           }
         }
 
-        // 2. Run AI detection on throttled interval
-        if (model && time - lastInferenceTime >= INFERENCE_INTERVAL_MS && !isDetectingRef.current) {
+        // 2. Run AI detection on throttled interval ONLY if NOT simulated
+        if (model && !isSimulatedRef.current && time - lastInferenceTime >= INFERENCE_INTERVAL_MS && !isDetectingRef.current) {
           isDetectingRef.current = true;
           lastInferenceTime = time;
 
@@ -339,7 +346,7 @@ export function usePersonDetection({
                 personCount: personDetections.length
               });
             } else {
-              // Check if debounce timeout has expired
+              // Check if inactivity debounce timeout has expired
               if (isPersonCurrentlyPresentRef.current && now - lastSeenRef.current > inactivityTimeoutMs) {
                 isPersonCurrentlyPresentRef.current = false;
                 onPersonLeave?.();
@@ -369,22 +376,43 @@ export function usePersonDetection({
         cancelAnimationFrame(requestAnimationIdRef.current);
       }
     };
-  }, [cameraActive, isSimulated, inactivityTimeoutMs, onPersonEnter, onPersonLeave]);
+  }, [cameraActive, inactivityTimeoutMs, onPersonEnter, onPersonLeave]);
 
-  // Simulation controls for testing without camera
+  // Turn off simulation and return to real AI camera vision
+  const disableSimulation = useCallback(() => {
+    setIsSimulated(false);
+    isSimulatedRef.current = false;
+    isPersonCurrentlyPresentRef.current = false;
+    lastDetectionsRef.current = [];
+    setDetection({
+      hasPerson: false,
+      score: 0,
+      personCount: 0
+    });
+  }, []);
+
+  // Simulation controls for testing without person (NEVER stops the camera feed!)
   const triggerSimulation = useCallback((hasPerson: boolean) => {
     setIsSimulated(true);
+    isSimulatedRef.current = true;
+
     if (hasPerson) {
       isPersonCurrentlyPresentRef.current = true;
+      lastDetectionsRef.current = [{
+        bbox: [120, 80, 240, 320],
+        score: 0.96,
+        class: 'person'
+      }];
       setDetection({
         hasPerson: true,
-        score: 0.95,
+        score: 0.96,
         personCount: 1,
-        bbox: [100, 100, 200, 300]
+        bbox: [120, 80, 240, 320]
       });
       onPersonEnter?.();
     } else {
       isPersonCurrentlyPresentRef.current = false;
+      lastDetectionsRef.current = [];
       setDetection({
         hasPerson: false,
         score: 0,
@@ -408,6 +436,7 @@ export function usePersonDetection({
     toggleFacingMode,
     selectDevice,
     triggerSimulation,
+    disableSimulation,
     restartCamera: startCamera
   };
 }

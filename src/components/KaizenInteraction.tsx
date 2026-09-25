@@ -743,42 +743,53 @@ export function KaizenInteraction({
                   </div>
                 </div>
 
-                {/* Alternative: Typed Input */}
-                <div className="mb-4">
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
-                    <span>Ou digite sua sugestão de melhoria:</span>
-                    <span className="text-slate-500 font-normal">Chão de fábrica / Processos</span>
-                  </label>
-                  <textarea
-                    value={rawIdeaVoice}
-                    onChange={(e) => setRawIdeaVoice(e.target.value)}
-                    placeholder="Ex: A esteira 4 fica travando porque junta pó na guia lateral, devia ter um suporte de escova ou aspirador ali perto..."
-                    rows={3}
-                    className="w-full bg-slate-950/70 border border-white/10 rounded-2xl p-4 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-400 transition"
-                  />
-                </div>
+                {/* Processing State when Voice or Text is being structured */}
+                {isRefiningWithAi ? (
+                  <div className="py-10 text-center bg-slate-950/70 border border-purple-500/30 rounded-2xl p-6">
+                    <div className="w-14 h-14 rounded-2xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center mx-auto mb-3">
+                      <RefreshCw className="w-7 h-7 text-purple-400 animate-spin" />
+                    </div>
+                    <h4 className="text-base font-bold text-white mb-1">
+                      Sensei IA Estruturando sua Ideia...
+                    </h4>
+                    <p className="text-xs text-purple-300 max-w-md mx-auto">
+                      Interpretando sua fala e organizando problema, solução e benefícios técnicos para você revisar.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    {/* Alternative: Typed Input */}
+                    <div className="mb-4">
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                        <span>Ou digite sua sugestão de melhoria:</span>
+                        <span className="text-slate-500 font-normal">Chão de fábrica / Processos</span>
+                      </label>
+                      <textarea
+                        value={rawIdeaVoice}
+                        onChange={(e) => setRawIdeaVoice(e.target.value)}
+                        placeholder="Ex: A esteira 4 fica travando porque junta pó na guia lateral, devia ter um suporte de escova ou aspirador ali perto..."
+                        rows={3}
+                        className="w-full bg-slate-950/70 border border-white/10 rounded-2xl p-4 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-400 transition"
+                      />
+                    </div>
 
-                {/* Button to Refine with AI */}
-                <div className="flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => refineIdeaWithGemini(rawIdeaVoice)}
-                    disabled={!rawIdeaVoice.trim() || isRefiningWithAi}
-                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-purple-600 to-cyan-500 hover:opacity-95 disabled:opacity-40 text-white font-bold text-sm transition cursor-pointer flex items-center gap-2 shadow-lg shadow-purple-500/20"
-                  >
-                    {isRefiningWithAi ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        Lapidando com IA...
-                      </>
-                    ) : (
-                      <>
-                        <Wand2 className="w-4 h-4 text-amber-200" />
-                        Lapidar e Estruturar com Gemini IA
-                      </>
-                    )}
-                  </button>
-                </div>
+                    {/* Action Bar for Typed Input */}
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[11px] text-slate-400 hidden sm:inline">
+                        💡 A fala é interpretada e lapidada automaticamente pelo Sensei.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => refineIdeaWithGemini(rawIdeaVoice)}
+                        disabled={!rawIdeaVoice.trim()}
+                        className="ml-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 hover:opacity-95 disabled:opacity-30 text-white font-bold text-xs sm:text-sm transition cursor-pointer flex items-center gap-2 shadow-md shadow-purple-500/20"
+                      >
+                        <span>Continuar para Revisão</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

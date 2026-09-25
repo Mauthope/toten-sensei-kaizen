@@ -83,6 +83,7 @@ export default function TotenPage() {
     toggleFacingMode,
     selectDevice,
     triggerSimulation,
+    disableSimulation,
     restartCamera
   } = usePersonDetection({
     onPersonEnter: handlePersonEnter,
@@ -230,6 +231,7 @@ export default function TotenPage() {
         onToggleFacingMode={toggleFacingMode}
         onSelectDevice={selectDevice}
         onToggleSimulation={triggerSimulation}
+        onDisableSimulation={disableSimulation}
         onRestartCamera={restartCamera}
       />
     </main>

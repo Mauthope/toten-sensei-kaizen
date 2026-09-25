@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Camera, SwitchCamera, AlertCircle, PlayCircle, StopCircle, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { Camera, SwitchCamera, AlertCircle, PlayCircle, StopCircle, RefreshCw, SlidersHorizontal, Eye } from 'lucide-react';
 import { DetectionResult } from '../types';
 import { CameraDevice } from '../hooks/usePersonDetection';
 
@@ -18,6 +18,7 @@ interface CameraFeedProps {
   onToggleFacingMode: () => void;
   onSelectDevice: (deviceId: string) => void;
   onToggleSimulation: (hasPerson: boolean) => void;
+  onDisableSimulation?: () => void;
   onRestartCamera: () => void;
 }
 
@@ -34,6 +35,7 @@ export function CameraFeed({
   onToggleFacingMode,
   onSelectDevice,
   onToggleSimulation,
+  onDisableSimulation,
   onRestartCamera
 }: CameraFeedProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -70,7 +72,10 @@ export function CameraFeed({
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center bg-slate-950/80">
                   <span className="text-xs text-slate-300 mb-2">Câmera em espera</span>
                   <button
-                    onClick={onRestartCamera}
+                    onClick={() => {
+                      onDisableSimulation?.();
+                      onRestartCamera();
+                    }}
                     className="px-3 py-1 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs hover:bg-cyan-500/30 transition cursor-pointer flex items-center gap-1"
                   >
                     <RefreshCw className="w-3 h-3" /> Iniciar Câmera
@@ -90,7 +95,10 @@ export function CameraFeed({
                   <AlertCircle className="w-5 h-5 text-red-400 mb-1" />
                   <span className="text-xs text-red-200 mb-2">{cameraError}</span>
                   <button
-                    onClick={onRestartCamera}
+                    onClick={() => {
+                      onDisableSimulation?.();
+                      onRestartCamera();
+                    }}
                     className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs transition cursor-pointer"
                   >
                     Tentar Novamente
@@ -145,36 +153,68 @@ export function CameraFeed({
             </div>
 
             <div className="bg-slate-800/80 p-2 rounded-lg border border-white/5">
-              <span className="text-slate-400 block text-[10px] uppercase">Confiança IA</span>
-              <span className="font-bold text-cyan-400">
-                {(detection.score * 100).toFixed(0)}%
+              <span className="text-slate-400 block text-[10px] uppercase">Modo Atual</span>
+              <span className={`font-bold ${isSimulated ? 'text-amber-400' : 'text-cyan-400'}`}>
+                {isSimulated ? 'Modo Simulado' : 'Câmera Real IA'}
               </span>
             </div>
           </div>
 
-          {/* Simulation Toggle Buttons for Testing */}
-          <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
-            <span className="text-[11px] text-slate-400">Simulador de Teste:</span>
-            <div className="flex gap-1.5">
+          {/* Simulation Toggle Controls: Real, Pessoa, Vazio */}
+          <div className="pt-2 border-t border-white/10">
+            <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2">
+              <span>Controle de Detecção:</span>
+              {isSimulated && (
+                <span className="text-amber-400 text-[10px] font-semibold animate-pulse">
+                  Simulação Ativa
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-1.5">
+              {/* Option 1: Real Camera with AI */}
               <button
-                onClick={() => onToggleSimulation(true)}
-                className={`px-2.5 py-1 text-xs rounded-md font-medium transition cursor-pointer flex items-center gap-1 ${
-                  isSimulated && detection.hasPerson
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                type="button"
+                onClick={() => onDisableSimulation?.()}
+                className={`px-2 py-1.5 text-[11px] rounded-lg font-medium transition cursor-pointer flex flex-col items-center justify-center text-center gap-0.5 ${
+                  !isSimulated
+                    ? 'bg-emerald-500/25 border border-emerald-400 text-emerald-300 shadow-sm'
+                    : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-white/5'
                 }`}
+                title="Usar Câmera Real com detecção automática por IA"
               >
-                <PlayCircle className="w-3.5 h-3.5" /> Pessoa
+                <Eye className="w-3.5 h-3.5" />
+                <span>Câmera Real</span>
               </button>
+
+              {/* Option 2: Simulate Person */}
               <button
-                onClick={() => onToggleSimulation(false)}
-                className={`px-2.5 py-1 text-xs rounded-md font-medium transition cursor-pointer flex items-center gap-1 ${
-                  isSimulated && !detection.hasPerson
-                    ? 'bg-cyan-500 text-white'
-                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                type="button"
+                onClick={() => onToggleSimulation(true)}
+                className={`px-2 py-1.5 text-[11px] rounded-lg font-medium transition cursor-pointer flex flex-col items-center justify-center text-center gap-0.5 ${
+                  isSimulated && detection.hasPerson
+                    ? 'bg-cyan-500/25 border border-cyan-400 text-cyan-300 shadow-sm'
+                    : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-white/5'
                 }`}
+                title="Simular que há uma pessoa em frente à câmera"
               >
-                <StopCircle className="w-3.5 h-3.5" /> Vazio
+                <PlayCircle className="w-3.5 h-3.5" />
+                <span>Simular Pessoa</span>
+              </button>
+
+              {/* Option 3: Simulate Empty (Camera stream remains active!) */}
+              <button
+                type="button"
+                onClick={() => onToggleSimulation(false)}
+                className={`px-2 py-1.5 text-[11px] rounded-lg font-medium transition cursor-pointer flex flex-col items-center justify-center text-center gap-0.5 ${
+                  isSimulated && !detection.hasPerson
+                    ? 'bg-amber-500/25 border border-amber-400 text-amber-300 shadow-sm'
+                    : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-white/5'
+                }`}
+                title="Simular ambiente vazio sem desligar o vídeo da câmera"
+              >
+                <StopCircle className="w-3.5 h-3.5" />
+                <span>Simular Vazio</span>
               </button>
             </div>
           </div>
@@ -198,7 +238,7 @@ export function CameraFeed({
           className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-white/15 backdrop-blur-md shadow-lg transition-all duration-200 text-xs font-medium cursor-pointer"
         >
           <Camera className="w-4 h-4 text-cyan-400" />
-          <span>{isOpen ? 'Ocultar Câmera' : 'Monitor IA'}</span>
+          <span>{isOpen ? 'Ocultar Monitor' : 'Monitor IA'}</span>
           {detection.hasPerson ? (
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           ) : (
