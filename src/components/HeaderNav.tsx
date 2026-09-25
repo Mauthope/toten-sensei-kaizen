@@ -1,15 +1,23 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Maximize2, Minimize2, Volume2, VolumeX, ShieldCheck, Info } from 'lucide-react';
+import { Maximize2, Minimize2, Volume2, VolumeX, ShieldCheck, SwitchCamera, Sparkles } from 'lucide-react';
 
 interface HeaderNavProps {
   isMuted: boolean;
   onToggleMute: () => void;
   personDetected: boolean;
+  facingMode?: 'user' | 'environment';
+  onToggleFacingMode?: () => void;
 }
 
-export function HeaderNav({ isMuted, onToggleMute, personDetected }: HeaderNavProps) {
+export function HeaderNav({
+  isMuted,
+  onToggleMute,
+  personDetected,
+  facingMode = 'user',
+  onToggleFacingMode
+}: HeaderNavProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentTime, setCurrentTime] = useState<string>('');
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
@@ -61,7 +69,7 @@ export function HeaderNav({ isMuted, onToggleMute, personDetected }: HeaderNavPr
               <span className={`inline-block w-2.5 h-2.5 rounded-full ${personDetected ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-cyan-400 animate-ping'}`} />
             </div>
             <p className="text-xs text-slate-400">
-              Toten Corporativo • Melhoria Contínua & 5S
+              Toten Corporativo • Inteligência Artificial Gemini & 5S
             </p>
           </div>
         </div>
@@ -75,6 +83,20 @@ export function HeaderNav({ isMuted, onToggleMute, personDetected }: HeaderNavPr
             </div>
           )}
 
+          {/* Camera Flip Quick Button */}
+          {onToggleFacingMode && (
+            <button
+              onClick={onToggleFacingMode}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-white/10 text-xs text-cyan-300 hover:text-white transition cursor-pointer"
+              title={`Trocar Câmera (Atual: ${facingMode === 'user' ? 'Frontal' : 'Traseira'})`}
+            >
+              <SwitchCamera className="w-4 h-4 text-cyan-400" />
+              <span className="hidden md:inline">
+                {facingMode === 'user' ? 'Frontal' : 'Traseira'}
+              </span>
+            </button>
+          )}
+
           {/* LGPD Compliance Tooltip Button */}
           <button
             onClick={() => setShowPrivacyModal(true)}
@@ -82,7 +104,7 @@ export function HeaderNav({ isMuted, onToggleMute, personDetected }: HeaderNavPr
             title="Conformidade LGPD"
           >
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span className="hidden md:inline">LGPD On-Device</span>
+            <span className="hidden lg:inline">LGPD On-Device</span>
           </button>
 
           {/* Audio Mute/Unmute */}
@@ -122,9 +144,9 @@ export function HeaderNav({ isMuted, onToggleMute, personDetected }: HeaderNavPr
             </p>
             <ul className="text-xs text-slate-400 space-y-2 mb-6 list-disc list-inside">
               <li>Nenhuma imagem, foto ou vídeo é gravado em disco.</li>
-              <li>Nenhum dado trafega pela internet ou servidores em nuvem.</li>
-              <li>Não realiza reconhecimento facial ou identificação de identidade.</li>
-              <li>A câmera atua estritamente como sensor de presença óptico interativo.</li>
+              <li>A inteligência de visão computacional roda na memória RAM do navegador.</li>
+              <li>Não realiza reconhecimento facial biométrico nem identifica colaboradores individualmente.</li>
+              <li>A câmera opera estritamente como sensor de proximidade e presença óptica interativa.</li>
             </ul>
             <button
               onClick={() => setShowPrivacyModal(false)}

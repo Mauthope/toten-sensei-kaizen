@@ -9,10 +9,15 @@ interface UsePersonDetectionOptions {
   inactivityTimeoutMs?: number;
 }
 
+export interface CameraDevice {
+  deviceId: string;
+  label: string;
+}
+
 export function usePersonDetection({
   onPersonEnter,
   onPersonLeave,
-  inactivityTimeoutMs = 3500
+  inactivityTimeoutMs = 3800
 }: UsePersonDetectionOptions = {}) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -23,6 +28,12 @@ export function usePersonDetection({
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isSimulated, setIsSimulated] = useState(false);
+
+  // Camera selection state
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const [availableDevices, setAvailableDevices] = useState<CameraDevice[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+
   const [detection, setDetection] = useState<DetectionResult>({
     hasPerson: false,
     score: 0,
@@ -34,53 +45,152 @@ export function usePersonDetection({
   const requestAnimationIdRef = useRef<number | null>(null);
   const isDetectingRef = useRef<boolean>(false);
 
-  // Initialize Camera
-  const startCamera = useCallback(async () => {
+  // Enumerate cameras
+  const refreshDevices = useCallback(async () => {
     try {
-      setCameraError(null);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user'
-        },
-        audio: false
-      });
-
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setCameraActive(true);
-      }
-    } catch (err: any) {
-      console.warn("Camera access failed:", err);
-      setCameraError(err.message || "Não foi possível acessar a câmera. Verifique as permissões.");
-      setCameraActive(false);
+      if (!navigator.mediaDevices?.enumerateDevices) return;
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevs = devices
+        .filter(d => d.kind === 'videoinput')
+        .map((d, idx) => ({
+          deviceId: d.deviceId,
+          label: d.label || `Câmera ${idx + 1}`
+        }));
+      setAvailableDevices(videoDevs);
+    } catch (err) {
+      console.warn("Error enumerating devices:", err);
     }
   }, []);
 
-  // Stop Camera
+  // Stop camera tracks cleanly
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current.getTracks().forEach(track => {
+        track.stop();
+      });
       streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
     setCameraActive(false);
   }, []);
 
-  // Load TensorFlow & COCO-SSD Model
+  // Initialize Camera with resilient fallback logic
+  const startCamera = useCallback(async () => {
+    try {
+      setCameraError(null);
+      stopCamera();
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Seu navegador não suporta acesso à câmera (getUserMedia).");
+      }
+
+      let stream: MediaStream | null = null;
+
+      // Strategy 1: If specific device selected
+      if (selectedDeviceId) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              deviceId: { exact: selectedDeviceId },
+              width: { ideal: 640 },
+              height: { ideal: 480 }
+            },
+            audio: false
+          });
+        } catch (devErr) {
+          console.warn("Failed with specific deviceId, falling back...", devErr);
+        }
+      }
+
+      // Strategy 2: Ideal facingMode
+      if (!stream) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: facingMode },
+              width: { ideal: 640 },
+              height: { ideal: 480 }
+            },
+            audio: false
+          });
+        } catch (facingErr) {
+          console.warn("Failed with facingMode constraint, trying generic video...", facingErr);
+        }
+      }
+
+      // Strategy 3: Generic video fallback (works on any webcam/driver)
+      if (!stream) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+      }
+
+      streamRef.current = stream;
+
+      // Update available devices once permission is granted
+      refreshDevices();
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        
+        // Wait for video metadata to be loaded
+        await new Promise<void>((resolve) => {
+          if (!videoRef.current) return resolve();
+          videoRef.current.onloadedmetadata = () => {
+            resolve();
+          };
+          // Timeout fallback in case event doesn't fire
+          setTimeout(resolve, 1000);
+        });
+
+        await videoRef.current.play().catch(playErr => {
+          console.warn("Auto-play blocked, retrying muted...", playErr);
+          if (videoRef.current) {
+            videoRef.current.muted = true;
+            return videoRef.current.play();
+          }
+        });
+
+        setCameraActive(true);
+      }
+    } catch (err: any) {
+      console.warn("Camera start failed:", err);
+      let msg = "Não foi possível acessar a câmera.";
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        msg = "Permissão da câmera foi negada. Permita o acesso nas configurações do navegador.";
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        msg = "Nenhuma câmera foi encontrada conectada ao dispositivo.";
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        msg = "A câmera já está sendo usada por outro aplicativo ou navegador.";
+      } else if (err.message) {
+        msg = err.message;
+      }
+      setCameraError(msg);
+      setCameraActive(false);
+    }
+  }, [facingMode, selectedDeviceId, stopCamera, refreshDevices]);
+
+  // Toggle between Frontal and Traseira
+  const toggleFacingMode = useCallback(() => {
+    setFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
+    setSelectedDeviceId(''); // clear exact device id so facingMode takes precedence
+  }, []);
+
+  // Select specific device ID
+  const selectDevice = useCallback((deviceId: string) => {
+    setSelectedDeviceId(deviceId);
+  }, []);
+
+  // Load TensorFlow & COCO-SSD Model on Mount
   useEffect(() => {
     let isMounted = true;
 
     async function loadModel() {
       try {
         setIsLoadingModel(true);
-        // Dynamic import to avoid SSR issues
         const tf = await import('@tensorflow/tfjs');
         await tf.ready();
         const cocoSsd = await import('@tensorflow-models/coco-ssd');
@@ -91,7 +201,6 @@ export function usePersonDetection({
         if (isMounted) {
           modelRef.current = loadedModel;
           setIsLoadingModel(false);
-          startCamera();
         }
       } catch (err: any) {
         console.error("Error loading TensorFlow / COCO-SSD model:", err);
@@ -111,7 +220,23 @@ export function usePersonDetection({
         cancelAnimationFrame(requestAnimationIdRef.current);
       }
     };
-  }, [startCamera, stopCamera]);
+  }, [stopCamera]);
+
+  // Restart camera when facingMode or selectedDeviceId changes
+  useEffect(() => {
+    if (!isLoadingModel) {
+      startCamera();
+    }
+  }, [facingMode, selectedDeviceId, isLoadingModel, startCamera]);
+
+  // Listen to device connect/disconnect
+  useEffect(() => {
+    if (typeof window !== 'undefined' && navigator.mediaDevices) {
+      navigator.mediaDevices.ondevicechange = () => {
+        refreshDevices();
+      };
+    }
+  }, [refreshDevices]);
 
   // Detection Loop with Throttling
   useEffect(() => {
@@ -130,7 +255,7 @@ export function usePersonDetection({
       const model = modelRef.current;
       const canvas = canvasRef.current;
 
-      if (video && model && video.readyState === 4) {
+      if (video && model && video.readyState >= 2 && !video.paused) {
         if (time - lastInferenceTime >= INFERENCE_INTERVAL_MS && !isDetectingRef.current) {
           isDetectingRef.current = true;
           lastInferenceTime = time;
@@ -140,19 +265,19 @@ export function usePersonDetection({
             
             // Filter strictly for persons
             const personDetections = predictions.filter(
-              (p: any) => p.class === 'person' && p.score >= 0.50
+              (p: any) => p.class === 'person' && p.score >= 0.45
             );
 
             const hasPerson = personDetections.length > 0;
             const bestDetection = personDetections[0];
             const now = Date.now();
 
-            // Draw bounding boxes on canvas if available (for preview/diagnostic)
+            // Draw bounding boxes on canvas if visible
             if (canvas) {
               const ctx = canvas.getContext('2d');
               if (ctx) {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 personDetections.forEach((p: any) => {
@@ -247,6 +372,11 @@ export function usePersonDetection({
     cameraError,
     detection,
     isSimulated,
+    facingMode,
+    availableDevices,
+    selectedDeviceId,
+    toggleFacingMode,
+    selectDevice,
     triggerSimulation,
     restartCamera: startCamera
   };

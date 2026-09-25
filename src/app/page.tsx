@@ -73,6 +73,11 @@ export default function TotenPage() {
     cameraError,
     detection,
     isSimulated,
+    facingMode,
+    availableDevices,
+    selectedDeviceId,
+    toggleFacingMode,
+    selectDevice,
     triggerSimulation,
     restartCamera
   } = usePersonDetection({
@@ -83,6 +88,18 @@ export default function TotenPage() {
 
   return (
     <main className="relative min-h-screen flex flex-col justify-between overflow-hidden bg-slate-950">
+      {/* 
+        CRITICAL: Video element MUST be persistently rendered in DOM so stream attaches immediately 
+        even when the diagnostic preview drawer is closed!
+      */}
+      <video
+        ref={videoRef}
+        playsInline
+        autoPlay
+        muted
+        className="hidden"
+      />
+
       {/* Background Radar Scanner Grid */}
       <RadarScanner isScanning={senseiState === 'idle'} />
 
@@ -91,6 +108,8 @@ export default function TotenPage() {
         isMuted={isMuted}
         onToggleMute={toggleMute}
         personDetected={detection.hasPerson}
+        facingMode={facingMode}
+        onToggleFacingMode={toggleFacingMode}
       />
 
       {/* Central Interactive Arena */}
@@ -118,7 +137,7 @@ export default function TotenPage() {
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-cyan-400" />
-            Toten Kiosk v1.0
+            Toten Kiosk v1.1 • Gemini IA
           </span>
           <span>•</span>
           <span className="text-slate-400">Desenvolvido para Chão de Fábrica & Melhoria Contínua</span>
@@ -127,7 +146,7 @@ export default function TotenPage() {
         <div className="flex items-center gap-4">
           <span className="text-slate-400">
             {cameraActive 
-              ? "Câmera: Ativa" 
+              ? `Câmera: Ativa (${facingMode === 'user' ? 'Frontal' : 'Traseira'})` 
               : isSimulated 
               ? "Modo: Simulação" 
               : isLoadingModel 
@@ -143,13 +162,17 @@ export default function TotenPage() {
 
       {/* Camera Diagnostic Preview & Simulator Floating Widget */}
       <CameraFeed
-        videoRef={videoRef}
         canvasRef={canvasRef}
         cameraActive={cameraActive}
         cameraError={cameraError}
         detection={detection}
         isLoadingModel={isLoadingModel}
         isSimulated={isSimulated}
+        facingMode={facingMode}
+        availableDevices={availableDevices}
+        selectedDeviceId={selectedDeviceId}
+        onToggleFacingMode={toggleFacingMode}
+        onSelectDevice={selectDevice}
         onToggleSimulation={triggerSimulation}
         onRestartCamera={restartCamera}
       />
