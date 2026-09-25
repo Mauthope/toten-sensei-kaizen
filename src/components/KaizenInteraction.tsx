@@ -153,9 +153,24 @@ export function KaizenInteraction({
     onSpeakRef.current(`${randomParty} ${chosenHook.calloutSpeech}`);
 
     setTimeout(() => {
-      onStateChangeRef.current('detected');
+      onStateChangeRef.current('interacting');
     }, 1800);
   }, []);
+
+  // Dynamically synchronize mascot sprite with active interaction context
+  useEffect(() => {
+    if (!hasCelebratedRef.current) return;
+
+    if (step === 'canal_kaizen') {
+      if (ideaPhase === 'success') {
+        onStateChangeRef.current('success');
+      } else {
+        onStateChangeRef.current('idea');
+      }
+    } else if (step === 'hook' || step === 'intro' || step === 'gemini' || step === 'pill') {
+      onStateChangeRef.current('interacting');
+    }
+  }, [step, ideaPhase]);
 
   // Web Speech Recognition for Chat & Canal Kaizen Voice
   const startSpeechForChat = useCallback(() => {
@@ -1333,7 +1348,10 @@ export function KaizenInteraction({
                 onClick={() => {
                   confetti({ particleCount: 120, spread: 90, origin: { y: 0.6 } });
                   onSpeak("Missão aceita! Bom turno e excelente trabalho!");
-                  setStep('hook');
+                  onStateChange('success');
+                  setTimeout(() => {
+                    setStep('hook');
+                  }, 2500);
                 }}
                 className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-sm font-bold transition shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center gap-2"
               >

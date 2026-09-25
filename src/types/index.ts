@@ -1,4 +1,4 @@
-export type SenseiState = 'idle' | 'detected' | 'interacting' | 'celebrating';
+export type SenseiState = 'idle' | 'detected' | 'interacting' | 'celebrating' | 'idea' | 'success';
 
 export interface DetectionResult {
   hasPerson: boolean;
