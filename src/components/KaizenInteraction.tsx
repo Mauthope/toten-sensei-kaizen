@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { KAIZEN_PILLS, INITIAL_QUIZ } from '../lib/kaizenData';
-import { KaizenPill, SenseiState } from '../types';
+import { DYNAMIC_HOOKS, KAIZEN_PILLS, DynamicHook, DynamicHookOption } from '../lib/kaizenData';
+import { SenseiState } from '../types';
 import { 
   Sparkles, 
   CheckCircle2, 
@@ -16,7 +16,10 @@ import {
   Bot, 
   Send, 
   Mic, 
-  MicOff 
+  MicOff,
+  Flame,
+  HelpCircle,
+  Compass
 } from 'lucide-react';
 
 interface KaizenInteractionProps {
@@ -25,9 +28,20 @@ interface KaizenInteractionProps {
 }
 
 export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionProps) {
-  const [step, setStep] = useState<'greeting' | 'pill' | 'challenge' | 'idea' | 'gemini'>('greeting');
+  // Navigation steps:
+  // 'hook': First dynamic attention-grabber question (no Kaizen jargon yet, relatable workplace problem)
+  // 'intro': Sensei introduces Kaizen/5S connecting to the user's specific answer
+  // 'pill': Detailed Kaizen & 5S Pills
+  // 'challenge': 2-minute 5S Turn Challenge
+  // 'gemini': Conversational AI with Google Gemini
+  // 'idea': Suggestion box for continuous improvement
+  const [step, setStep] = useState<'hook' | 'intro' | 'pill' | 'challenge' | 'idea' | 'gemini'>('hook');
+
+  // Currently active dynamic hook
+  const [currentHook, setCurrentHook] = useState<DynamicHook>(DYNAMIC_HOOKS[0]);
+  const [selectedOption, setSelectedOption] = useState<DynamicHookOption | null>(null);
   const [selectedPillIndex, setSelectedPillIndex] = useState(0);
-  
+
   // Gemini AI Chat states
   const [chatInput, setChatInput] = useState('');
   const [aiResponse, setAiResponse] = useState<string | null>(null);
@@ -39,9 +53,19 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
   const [ideaText, setIdeaText] = useState('');
   const [ideaSubmitted, setIdeaSubmitted] = useState(false);
 
-  const currentPill = KAIZEN_PILLS[selectedPillIndex];
+  // Randomize hook whenever this component mounts (i.e. whenever someone is newly detected!)
+  useEffect(() => {
+    const randomIdx = Math.floor(Math.random() * DYNAMIC_HOOKS.length);
+    const chosenHook = DYNAMIC_HOOKS[randomIdx];
+    setCurrentHook(chosenHook);
+    setStep('hook');
+    setSelectedOption(null);
 
-  // Initialize Speech Recognition if supported
+    // Speak dynamic attention callout
+    onSpeak(chosenHook.calloutSpeech);
+  }, []); // Run on mount
+
+  // Speech Recognition setup
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -55,7 +79,6 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
           const transcript = event.results[0][0].transcript;
           setChatInput(transcript);
           setIsListening(false);
-          // Auto submit spoken question
           handleAskGemini(transcript);
         };
 
@@ -68,7 +91,7 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
 
   const toggleSpeechRecognition = () => {
     if (!recognitionRef.current) {
-      alert("Reconhecimento de fala por voz não suportado neste navegador. Use a caixa de texto!");
+      alert("Reconhecimento de voz não suportado neste navegador. Digite sua pergunta!");
       return;
     }
 
@@ -106,7 +129,6 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
       setAiResponse(reply);
       onSpeak(reply);
 
-      // Mini sparkle celebration for intelligent reply
       confetti({
         particleCount: 50,
         spread: 60,
@@ -122,25 +144,29 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
     }
   };
 
-  const handleAnswerQuiz = (optionIndex: number) => {
-    const option = INITIAL_QUIZ.options[optionIndex];
-    onSpeak(option.response);
+  // User answered the dynamic hook question -> Introduce Kaizen now!
+  const handleSelectHookOption = (option: DynamicHookOption) => {
+    setSelectedOption(option);
+    onSpeak(option.reactionSpeech);
 
-    if (optionIndex === 0) {
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 }
-      });
-      onStateChange('celebrating');
-      setTimeout(() => {
-        setStep('challenge');
-        onStateChange('interacting');
-      }, 1200);
-    } else {
-      setStep('pill');
-      onStateChange('interacting');
+    confetti({
+      particleCount: 70,
+      spread: 70,
+      origin: { y: 0.6 }
+    });
+
+    onStateChange('interacting');
+    setStep('intro');
+  };
+
+  const handleOpenRecommendedPill = () => {
+    if (selectedOption?.recommendedPillId) {
+      const pIdx = KAIZEN_PILLS.findIndex(p => p.id === selectedOption.recommendedPillId);
+      if (pIdx !== -1) {
+        setSelectedPillIndex(pIdx);
+      }
     }
+    setStep('pill');
   };
 
   const handleNextPill = () => {
@@ -165,80 +191,220 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
   return (
     <div className="w-full max-w-2xl mx-auto px-4 z-20">
       <AnimatePresence mode="wait">
-        {/* STEP 1: GREETING & INITIAL QUESTION */}
-        {step === 'greeting' && (
+        
+        {/* STEP 1: DYNAMIC HOOK (Attention Grabber & Relatable Icebreaker) */}
+        {step === 'hook' && (
           <motion.div
-            key="greeting"
+            key="hook"
             initial={{ opacity: 0, y: 20, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.96 }}
-            className="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
+            className="bg-slate-900/85 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
           >
+            {/* Top Cyan Glowing Line */}
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-cyan-500" />
 
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
-                <Sparkles className="w-3.5 h-3.5" />
-                Presença Detectada
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 animate-pulse">
+                <Flame className="w-3.5 h-3.5 text-cyan-400" />
+                {currentHook.badge}
               </span>
               <button
                 onClick={() => setStep('gemini')}
-                className="px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-purple-500/20 to-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 transition cursor-pointer flex items-center gap-1.5"
+                className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition cursor-pointer flex items-center gap-1.5"
               >
-                <Bot className="w-3.5 h-3.5 text-cyan-400" />
-                Perguntar à IA do Sensei ✨
+                <Bot className="w-3.5 h-3.5 text-purple-400" />
+                Conversar com Gemini IA
               </button>
             </div>
 
-            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2 tracking-tight">
-              Olá! Estou te vendo! 👀
+            <h2 className="text-xl sm:text-2xl font-bold text-white mb-2 tracking-tight">
+              {currentHook.question}
             </h2>
-            <p className="text-lg text-slate-300 mb-6">
-              Você sabe o que é <span className="text-cyan-400 font-semibold">Kaizen</span>?
+            <p className="text-xs sm:text-sm text-slate-300 mb-5">
+              Toque na opção que mais combina com a sua realidade hoje:
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {INITIAL_QUIZ.options.map((option, idx) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+              {currentHook.options.map((option, idx) => (
                 <button
                   key={idx}
-                  onClick={() => handleAnswerQuiz(idx)}
-                  className="flex flex-col items-center justify-center text-center p-4 rounded-xl bg-slate-800/80 hover:bg-cyan-500/15 border border-white/10 hover:border-cyan-500/50 text-white font-medium transition-all duration-200 group active:scale-95 cursor-pointer shadow-md hover:shadow-cyan-500/10"
+                  onClick={() => handleSelectHookOption(option)}
+                  className="flex items-center justify-start text-left p-3.5 sm:p-4 rounded-xl bg-slate-800/80 hover:bg-cyan-500/15 border border-white/10 hover:border-cyan-500/50 text-white font-medium transition-all duration-200 group active:scale-98 cursor-pointer shadow-md hover:shadow-cyan-500/10"
                 >
-                  <span className="text-base sm:text-lg mb-1 group-hover:scale-110 transition-transform">
-                    {option.text.split(' ')[0]}
-                  </span>
-                  <span className="text-xs sm:text-sm text-slate-300 group-hover:text-cyan-300">
-                    {option.text.split(' ').slice(1).join(' ')}
+                  <span className="text-sm sm:text-base text-slate-200 group-hover:text-cyan-300">
+                    {option.text}
                   </span>
                 </button>
               ))}
             </div>
 
-            <div className="mt-6 pt-4 border-t border-white/10 flex flex-wrap justify-between items-center gap-2 text-xs text-slate-400">
+            <div className="pt-3 border-t border-white/10 flex justify-between items-center text-xs text-slate-400">
+              <span>O Sensei está te ouvindo atentamente</span>
               <button
-                onClick={() => setStep('gemini')}
-                className="text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1 cursor-pointer font-medium"
+                onClick={() => {
+                  const nextHookIdx = (DYNAMIC_HOOKS.findIndex(h => h.id === currentHook.id) + 1) % DYNAMIC_HOOKS.length;
+                  setCurrentHook(DYNAMIC_HOOKS[nextHookIdx]);
+                  onSpeak(DYNAMIC_HOOKS[nextHookIdx].calloutSpeech);
+                }}
+                className="text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1 cursor-pointer"
               >
-                <Bot className="w-4 h-4" /> Bate-Papo Inteligente com o Sensei
-              </button>
-              <button
-                onClick={() => setStep('idea')}
-                className="text-slate-300 hover:text-white hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <Lightbulb className="w-3.5 h-3.5 text-amber-400" /> Enviar uma Sugestão
+                <RefreshCw className="w-3.5 h-3.5" /> Outra Pergunta
               </button>
             </div>
           </motion.div>
         )}
 
-        {/* STEP 2: GEMINI AI CHAT & CONSULTATION */}
+        {/* STEP 2: METHODOLOGY INTRODUCTION (Appears ONLY AFTER user's first choice!) */}
+        {step === 'intro' && selectedOption && (
+          <motion.div
+            key="intro"
+            initial={{ opacity: 0, y: 20, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.96 }}
+            className="bg-slate-900/85 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-cyan-500 to-amber-500" />
+
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                <Sparkles className="w-3.5 h-3.5" />
+                A Solução Kaizen & 5S
+              </span>
+              <span className="text-xs text-slate-400">Filosofia de Produção</span>
+            </div>
+
+            {/* Sensei's Reaction Speech */}
+            <div className="bg-cyan-500/10 border border-cyan-500/25 rounded-xl p-4 mb-4">
+              <p className="text-sm sm:text-base font-medium text-cyan-200 italic">
+                &ldquo;{selectedOption.reactionSpeech}&rdquo;
+              </p>
+            </div>
+
+            {/* Structured Methodology Explanation */}
+            <div className="bg-slate-950/60 border border-white/5 rounded-xl p-4 sm:p-5 mb-5 text-slate-200 text-xs sm:text-sm leading-relaxed">
+              <h4 className="text-sm sm:text-base font-bold text-white mb-2 flex items-center gap-2">
+                <Compass className="w-4 h-4 text-cyan-400" />
+                Como a metodologia resolve isso na prática:
+              </h4>
+              <p className="text-slate-300">
+                {selectedOption.methodologyIntro}
+              </p>
+            </div>
+
+            {/* Next Action Choices */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <button
+                onClick={handleOpenRecommendedPill}
+                className="p-3 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-xs sm:text-sm font-semibold transition cursor-pointer flex flex-col items-center justify-center text-center gap-1"
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>Ver Pílulas 5S</span>
+              </button>
+
+              <button
+                onClick={() => setStep('challenge')}
+                className="p-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs sm:text-sm font-semibold transition cursor-pointer flex flex-col items-center justify-center text-center gap-1"
+              >
+                <Trophy className="w-4 h-4" />
+                <span>Desafio 5S (2 min)</span>
+              </button>
+
+              <button
+                onClick={() => setStep('gemini')}
+                className="p-3 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-xs sm:text-sm font-semibold transition cursor-pointer flex flex-col items-center justify-center text-center gap-1"
+              >
+                <Bot className="w-4 h-4" />
+                <span>Perguntar ao Gemini</span>
+              </button>
+            </div>
+
+            <div className="mt-5 pt-3 border-t border-white/10 flex justify-between items-center text-xs text-slate-400">
+              <button
+                onClick={() => setStep('hook')}
+                className="text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                ← Voltar à pergunta inicial
+              </button>
+              <button
+                onClick={() => setStep('idea')}
+                className="text-amber-400 hover:text-amber-300 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <Lightbulb className="w-3.5 h-3.5" /> Tenho uma ideia de melhoria
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* STEP 3: KAIZEN KNOWLEDGE PILLS */}
+        {step === 'pill' && (
+          <motion.div
+            key="pill"
+            initial={{ opacity: 0, y: 20, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.96 }}
+            className="bg-slate-900/85 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500" />
+
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                <BookOpen className="w-3.5 h-3.5" />
+                Pílula #{selectedPillIndex + 1} de {KAIZEN_PILLS.length}
+              </span>
+              <span className="text-xs text-slate-400">{KAIZEN_PILLS[selectedPillIndex].tag}</span>
+            </div>
+
+            <h3 className="text-2xl font-bold text-white mb-1">
+              {KAIZEN_PILLS[selectedPillIndex].title}
+            </h3>
+            <p className="text-sm font-medium text-cyan-400 mb-4">
+              {KAIZEN_PILLS[selectedPillIndex].subtitle}
+            </p>
+
+            <div className="bg-slate-950/60 border border-white/5 rounded-xl p-4 sm:p-5 mb-4 text-slate-200 text-sm sm:text-base leading-relaxed">
+              {KAIZEN_PILLS[selectedPillIndex].content}
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 mb-6 text-xs sm:text-sm text-amber-300">
+              {KAIZEN_PILLS[selectedPillIndex].tip}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <button
+                onClick={() => setStep('intro')}
+                className="px-4 py-2.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 text-sm font-medium transition cursor-pointer flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-4 h-4" /> Voltar
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setStep('challenge')}
+                  className="px-4 py-2.5 rounded-lg bg-slate-800 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/30 text-sm font-semibold transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <Trophy className="w-4 h-4" /> Desafio do Dia
+                </button>
+
+                <button
+                  onClick={handleNextPill}
+                  className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-sm font-semibold transition shadow-lg shadow-cyan-500/20 cursor-pointer flex items-center gap-1.5"
+                >
+                  Próxima Pílula <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* STEP 4: GEMINI AI CHAT & CONSULTATION */}
         {step === 'gemini' && (
           <motion.div
             key="gemini"
             initial={{ opacity: 0, y: 20, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.96 }}
-            className="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
+            className="bg-slate-900/85 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
           >
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-purple-500 via-cyan-500 to-blue-500" />
 
@@ -248,7 +414,7 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
                 Sensei Gemini IA • Resposta por Voz
               </span>
               <button
-                onClick={() => setStep('greeting')}
+                onClick={() => setStep('hook')}
                 className="text-xs text-slate-400 hover:text-white cursor-pointer"
               >
                 Voltar ✕
@@ -259,15 +425,15 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
               Pergunte qualquer coisa ao Sensei! 🥋
             </h3>
             <p className="text-xs sm:text-sm text-slate-300 mb-4">
-              Dúvidas sobre o posto de trabalho, 5S, eliminação de desperdícios ou produtividade? O Sensei responde e fala com você!
+              Dúvidas sobre o posto de trabalho, 5S, desperdícios ou processos? O Sensei responde e fala com você!
             </p>
 
             {/* Quick Questions Pills */}
             <div className="flex flex-wrap gap-1.5 mb-4">
               {[
-                "Como aplicar o 5S hoje?",
-                "O que é Poka-Yoke?",
-                "Como eliminar desperdício de tempo?",
+                "Como organizar minha bancada com 5S?",
+                "O que é Poka-Yoke na prática?",
+                "Como evitar peças com defeito?",
                 "Qual a regra de ouro do Kaizen?"
               ].map((q, idx) => (
                 <button
@@ -311,7 +477,6 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
                 className="flex-1 bg-slate-950/70 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
               />
 
-              {/* Voice Input Mic Button */}
               <button
                 type="button"
                 onClick={toggleSpeechRecognition}
@@ -325,7 +490,6 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
                 {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
               </button>
 
-              {/* Send Button */}
               <button
                 type="button"
                 onClick={() => handleAskGemini()}
@@ -342,75 +506,14 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
           </motion.div>
         )}
 
-        {/* STEP 3: KAIZEN KNOWLEDGE PILLS */}
-        {step === 'pill' && (
-          <motion.div
-            key="pill"
-            initial={{ opacity: 0, y: 20, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.96 }}
-            className="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
-          >
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500" />
-
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                <BookOpen className="w-3.5 h-3.5" />
-                Pílula Kaizen #{selectedPillIndex + 1} de {KAIZEN_PILLS.length}
-              </span>
-              <span className="text-xs text-slate-400">{currentPill.tag}</span>
-            </div>
-
-            <h3 className="text-2xl font-bold text-white mb-1">
-              {currentPill.title}
-            </h3>
-            <p className="text-sm font-medium text-cyan-400 mb-4">
-              {currentPill.subtitle}
-            </p>
-
-            <div className="bg-slate-950/60 border border-white/5 rounded-xl p-4 sm:p-5 mb-4 text-slate-200 text-sm sm:text-base leading-relaxed">
-              {currentPill.content}
-            </div>
-
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 mb-6 text-xs sm:text-sm text-amber-300">
-              {currentPill.tip}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <button
-                onClick={() => setStep('greeting')}
-                className="px-4 py-2.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 text-sm font-medium transition cursor-pointer flex items-center gap-1.5"
-              >
-                <RefreshCw className="w-4 h-4" /> Voltar
-              </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setStep('challenge')}
-                  className="px-4 py-2.5 rounded-lg bg-slate-800 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/30 text-sm font-semibold transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <Trophy className="w-4 h-4" /> Desafio do Dia
-                </button>
-
-                <button
-                  onClick={handleNextPill}
-                  className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-sm font-semibold transition shadow-lg shadow-cyan-500/20 cursor-pointer flex items-center gap-1.5"
-                >
-                  Próxima Pílula <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* STEP 4: DAILY 5S / KAIZEN CHALLENGE */}
+        {/* STEP 5: DAILY 5S / KAIZEN CHALLENGE */}
         {step === 'challenge' && (
           <motion.div
             key="challenge"
             initial={{ opacity: 0, y: 20, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.96 }}
-            className="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
+            className="bg-slate-900/85 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
           >
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-500 to-emerald-500" />
 
@@ -448,7 +551,7 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
 
             <div className="flex items-center justify-between gap-3">
               <button
-                onClick={() => setStep('greeting')}
+                onClick={() => setStep('intro')}
                 className="px-4 py-2.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 text-sm font-medium transition cursor-pointer"
               >
                 Voltar
@@ -458,7 +561,7 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
                 onClick={() => {
                   confetti({ particleCount: 120, spread: 90, origin: { y: 0.6 } });
                   onSpeak("Missão aceita! Bom turno e excelente trabalho!");
-                  setStep('greeting');
+                  setStep('hook');
                 }}
                 className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-sm font-semibold transition shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center gap-2"
               >
@@ -468,14 +571,14 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
           </motion.div>
         )}
 
-        {/* STEP 5: SUGGEST KAIZEN IDEA */}
+        {/* STEP 6: SUGGEST KAIZEN IDEA */}
         {step === 'idea' && (
           <motion.div
             key="idea"
             initial={{ opacity: 0, y: 20, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.96 }}
-            className="bg-slate-900/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
+            className="bg-slate-900/85 backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
           >
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-purple-500 to-pink-500" />
 
@@ -505,7 +608,7 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
                   onClick={() => {
                     setIdeaSubmitted(false);
                     setIdeaText('');
-                    setStep('greeting');
+                    setStep('hook');
                   }}
                   className="px-5 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 text-sm font-medium transition cursor-pointer"
                 >
@@ -525,7 +628,7 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
                 <div className="flex items-center justify-between gap-3">
                   <button
                     type="button"
-                    onClick={() => setStep('greeting')}
+                    onClick={() => setStep('hook')}
                     className="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:text-white text-sm font-medium transition cursor-pointer"
                   >
                     Cancelar
@@ -542,6 +645,7 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
             )}
           </motion.div>
         )}
+
       </AnimatePresence>
     </div>
   );

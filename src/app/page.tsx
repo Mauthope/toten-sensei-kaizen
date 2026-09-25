@@ -10,11 +10,9 @@ import { KaizenInteraction } from '../components/KaizenInteraction';
 import { CameraFeed } from '../components/CameraFeed';
 import { HeaderNav } from '../components/HeaderNav';
 import { SenseiState } from '../types';
-import { GREETING_PHRASES } from '../lib/kaizenData';
 
 export default function TotenPage() {
   const [senseiState, setSenseiState] = useState<SenseiState>('idle');
-  const greetingSpokenRef = useRef(false);
 
   const { speak, isMuted, toggleMute, isSpeaking } = useSpeechSynthesis();
 
@@ -50,19 +48,11 @@ export default function TotenPage() {
   // When a person enters camera vision
   const handlePersonEnter = useCallback(() => {
     setSenseiState('detected');
-
-    // Only speak greeting once per detection session
-    if (!greetingSpokenRef.current) {
-      greetingSpokenRef.current = true;
-      const randomGreeting = GREETING_PHRASES[Math.floor(Math.random() * GREETING_PHRASES.length)];
-      speak(randomGreeting);
-    }
-  }, [speak]);
+  }, []);
 
   // When the person leaves and timeout expires
   const handlePersonLeave = useCallback(() => {
     setSenseiState('idle');
-    greetingSpokenRef.current = false;
   }, []);
 
   const {
