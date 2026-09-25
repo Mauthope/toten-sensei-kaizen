@@ -47,6 +47,7 @@ export function usePersonDetection({
   const isPersonCurrentlyPresentRef = useRef<boolean>(false);
   const requestAnimationIdRef = useRef<number | null>(null);
   const isDetectingRef = useRef<boolean>(false);
+  const pauseDetectionUntilRef = useRef<number>(0);
 
   // Enumerate cameras
   const refreshDevices = useCallback(async () => {
@@ -319,6 +320,13 @@ export function usePersonDetection({
           isDetectingRef.current = true;
           lastInferenceTime = time;
 
+          const now = Date.now();
+          // Check if detection is in temporary cooldown (e.g. after manual reset or 'Vazio')
+          if (now < pauseDetectionUntilRef.current) {
+            isDetectingRef.current = false;
+            return;
+          }
+
           try {
             const predictions = await model.detect(video);
             
@@ -384,6 +392,7 @@ export function usePersonDetection({
     isSimulatedRef.current = false;
     isPersonCurrentlyPresentRef.current = false;
     lastDetectionsRef.current = [];
+    pauseDetectionUntilRef.current = 0;
     setDetection({
       hasPerson: false,
       score: 0,
@@ -391,12 +400,26 @@ export function usePersonDetection({
     });
   }, []);
 
-  // Simulation controls for testing without person (NEVER stops the camera feed!)
-  const triggerSimulation = useCallback((hasPerson: boolean) => {
-    setIsSimulated(true);
-    isSimulatedRef.current = true;
+  // Reset presence with cooldown (used when ending interaction so screen doesn't immediately re-open)
+  const resetPresence = useCallback((cooldownMs: number = 3000) => {
+    setIsSimulated(false);
+    isSimulatedRef.current = false;
+    isPersonCurrentlyPresentRef.current = false;
+    lastDetectionsRef.current = [];
+    pauseDetectionUntilRef.current = Date.now() + cooldownMs;
+    setDetection({
+      hasPerson: false,
+      score: 0,
+      personCount: 0
+    });
+    onPersonLeave?.();
+  }, [onPersonLeave]);
 
+  // Simulation controls for testing (NEVER disables real camera detection on Vazio!)
+  const triggerSimulation = useCallback((hasPerson: boolean) => {
     if (hasPerson) {
+      setIsSimulated(true);
+      isSimulatedRef.current = true;
       isPersonCurrentlyPresentRef.current = true;
       lastDetectionsRef.current = [{
         bbox: [120, 80, 240, 320],
@@ -411,8 +434,14 @@ export function usePersonDetection({
       });
       onPersonEnter?.();
     } else {
+      // User clicked "Simular Vazio":
+      // IMPORTANT: DO NOT lock simulation mode! Keep real detection ready!
+      setIsSimulated(false);
+      isSimulatedRef.current = false;
       isPersonCurrentlyPresentRef.current = false;
       lastDetectionsRef.current = [];
+      // 3.5s cooldown so the idle screen is shown and user can test approaching
+      pauseDetectionUntilRef.current = Date.now() + 3500;
       setDetection({
         hasPerson: false,
         score: 0,
@@ -437,6 +466,7 @@ export function usePersonDetection({
     selectDevice,
     triggerSimulation,
     disableSimulation,
+    resetPresence,
     restartCamera: startCamera
   };
 }

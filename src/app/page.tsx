@@ -48,10 +48,6 @@ export default function TotenPage() {
     };
   }, []);
 
-  const handleReturnToIdle = useCallback(() => {
-    setSenseiState('idle');
-  }, []);
-
   const handleStateChange = useCallback((st: SenseiState) => {
     setSenseiState(st);
   }, []);
@@ -84,12 +80,18 @@ export default function TotenPage() {
     selectDevice,
     triggerSimulation,
     disableSimulation,
+    resetPresence,
     restartCamera
   } = usePersonDetection({
     onPersonEnter: handlePersonEnter,
     onPersonLeave: handlePersonLeave,
     inactivityTimeoutMs: 15000 // 15s grace buffer without any person before returning to binocular idle
   });
+
+  const handleReturnToIdle = useCallback(() => {
+    resetPresence(3500);
+    setSenseiState('idle');
+  }, [resetPresence]);
 
   return (
     <main className="relative min-h-screen flex flex-col justify-between overflow-hidden bg-slate-950">
