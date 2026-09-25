@@ -58,8 +58,23 @@ export function KaizenInteraction({ onSpeak, onStateChange, onReturnToIdle }: Ka
   const [ideaText, setIdeaText] = useState('');
   const [ideaSubmitted, setIdeaSubmitted] = useState(false);
 
-  // Party celebration & dynamic greeting on detection
+  // Callbacks stored in refs to avoid re-triggering effects on parent re-renders
+  const onReturnToIdleRef = useRef(onReturnToIdle);
+  onReturnToIdleRef.current = onReturnToIdle;
+
+  const onSpeakRef = useRef(onSpeak);
+  onSpeakRef.current = onSpeak;
+
+  const onStateChangeRef = useRef(onStateChange);
+  onStateChangeRef.current = onStateChange;
+
+  const hasCelebratedRef = useRef(false);
+
+  // Party celebration & dynamic greeting on detection - RUNS STRICTLY ONCE ON MOUNT
   useEffect(() => {
+    if (hasCelebratedRef.current) return;
+    hasCelebratedRef.current = true;
+
     // 1. Party celebration bursts (confetti!)
     confetti({
       particleCount: 80,
@@ -74,7 +89,7 @@ export function KaizenInteraction({ onSpeak, onStateChange, onReturnToIdle }: Ka
       });
     }, 200);
 
-    onStateChange('celebrating');
+    onStateChangeRef.current('celebrating');
 
     // 2. Energetic Party greetings
     const partyGreetings = [
@@ -94,10 +109,10 @@ export function KaizenInteraction({ onSpeak, onStateChange, onReturnToIdle }: Ka
     setCountdown(10);
 
     // Speak dynamic celebration phrase + question
-    onSpeak(`${randomParty} ${chosenHook.calloutSpeech}`);
+    onSpeakRef.current(`${randomParty} ${chosenHook.calloutSpeech}`);
 
     setTimeout(() => {
-      onStateChange('detected');
+      onStateChangeRef.current('detected');
     }, 1800);
 
     // 3. Start 10-second countdown for initial hook if no touch
@@ -106,7 +121,7 @@ export function KaizenInteraction({ onSpeak, onStateChange, onReturnToIdle }: Ka
       setCountdown((prev) => {
         if (prev <= 1) {
           if (timerRef.current) clearInterval(timerRef.current);
-          onReturnToIdle();
+          onReturnToIdleRef.current();
           return 0;
         }
         return prev - 1;
@@ -116,7 +131,7 @@ export function KaizenInteraction({ onSpeak, onStateChange, onReturnToIdle }: Ka
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [onReturnToIdle, onSpeak, onStateChange]);
+  }, []);
 
   // Speech Recognition setup
   useEffect(() => {

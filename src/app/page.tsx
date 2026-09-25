@@ -47,9 +47,20 @@ export default function TotenPage() {
     };
   }, []);
 
+  const handleReturnToIdle = useCallback(() => {
+    setSenseiState('idle');
+  }, []);
+
+  const handleStateChange = useCallback((st: SenseiState) => {
+    setSenseiState(st);
+  }, []);
+
   // When a person enters camera vision
   const handlePersonEnter = useCallback(() => {
-    setSenseiState('detected');
+    setSenseiState((prev) => {
+      if (prev === 'idle') return 'celebrating';
+      return prev;
+    });
   }, []);
 
   // When the person leaves and timeout expires
@@ -151,8 +162,8 @@ export default function TotenPage() {
           <div className="w-full flex justify-center flex-1 items-center">
             <KaizenInteraction
               onSpeak={speak}
-              onStateChange={setSenseiState}
-              onReturnToIdle={() => setSenseiState('idle')}
+              onStateChange={handleStateChange}
+              onReturnToIdle={handleReturnToIdle}
             />
           </div>
         )}

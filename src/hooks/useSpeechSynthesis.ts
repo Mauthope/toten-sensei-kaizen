@@ -26,8 +26,19 @@ export function useSpeechSynthesis() {
     }
   }, []);
 
+  const lastSpokenTextRef = useRef<string>('');
+  const lastSpokenTimeRef = useRef<number>(0);
+
   const speak = useCallback((text: string) => {
     if (!isSupported || isMuted || typeof window === 'undefined') return;
+
+    // Prevent spamming the exact same utterance within 2 seconds
+    const now = Date.now();
+    if (lastSpokenTextRef.current === text && now - lastSpokenTimeRef.current < 2000) {
+      return;
+    }
+    lastSpokenTextRef.current = text;
+    lastSpokenTimeRef.current = now;
 
     try {
       window.speechSynthesis.cancel(); // Stop current speech to avoid backlog
