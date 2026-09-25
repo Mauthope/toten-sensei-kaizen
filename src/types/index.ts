@@ -29,3 +29,19 @@ export interface QuizQuestion {
   question: string;
   options: QuizOption[];
 }
+
+export interface CanalKaizenIdea {
+  id: string;
+  protocol: string;
+  title: string;
+  category: string;
+  problem: string;
+  solution: string;
+  benefits: string;
+  rawVoiceInput?: string;
+  authorName?: string;
+  department?: string;
+  createdAt: string;
+  status: 'Em Análise' | 'Aprovado' | 'Em Teste' | 'Implementado';
+  senseiEncouragement?: string;
+}

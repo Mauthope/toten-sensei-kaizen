@@ -10,6 +10,7 @@ import { KaizenInteraction } from '../components/KaizenInteraction';
 import { CameraFeed } from '../components/CameraFeed';
 import { HeaderNav } from '../components/HeaderNav';
 import { SenseiState } from '../types';
+import { SwitchCamera, Eye } from 'lucide-react';
 
 export default function TotenPage() {
   const [senseiState, setSenseiState] = useState<SenseiState>('idle');
@@ -63,7 +64,7 @@ export default function TotenPage() {
     });
   }, []);
 
-  // When the person leaves and timeout expires
+  // When the person leaves and timeout expires (e.g. 15s absence)
   const handlePersonLeave = useCallback(() => {
     setSenseiState('idle');
   }, []);
@@ -86,7 +87,7 @@ export default function TotenPage() {
   } = usePersonDetection({
     onPersonEnter: handlePersonEnter,
     onPersonLeave: handlePersonLeave,
-    inactivityTimeoutMs: 3800 // 3.8s inactivity buffer before returning to binocular idle mode
+    inactivityTimeoutMs: 15000 // 15s grace buffer without any person before returning to binocular idle
   });
 
   return (
@@ -116,7 +117,7 @@ export default function TotenPage() {
       />
 
       {/* Central Interactive Arena */}
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-between px-4 py-4 w-full max-w-5xl mx-auto">
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-between px-3 sm:px-6 py-3 sm:py-5 w-full max-w-5xl mx-auto">
         {/* Upper Area: Sensei Mascot */}
         <div className="w-full flex flex-col items-center justify-center flex-1">
           <div className="mb-2 sm:mb-4">
@@ -130,11 +131,12 @@ export default function TotenPage() {
           )}
         </div>
 
-        {/* Dynamic Lower Area: Idle (Lower Half Camera) vs Active (Kaizen Interaction) */}
+        {/* Dynamic Lower Area: Idle (Larger Lower Half Camera) vs Active (Kaizen Interaction) */}
         {senseiState === 'idle' ? (
-          /* Bottom Half: Live Camera Scanner Feed */
-          <div className="w-full max-w-2xl px-2 pb-2">
-            <div className="relative aspect-video sm:aspect-[21/9] max-h-[35vh] w-full rounded-2xl overflow-hidden border-2 border-cyan-500/40 bg-slate-950/80 shadow-[0_0_30px_rgba(6,182,212,0.25)] flex items-center justify-center">
+          /* Bottom Half: Prominent & High-Tech Camera Scanner Feed */
+          <div className="w-full max-w-4xl px-2 sm:px-4 pb-2 sm:pb-4">
+            <div className="relative aspect-video sm:aspect-[16/9] min-h-[300px] sm:min-h-[420px] max-h-[50vh] w-full rounded-3xl overflow-hidden border-2 border-cyan-500/50 bg-slate-950/90 shadow-[0_0_40px_rgba(6,182,212,0.3)] flex items-center justify-center">
+              
               <canvas
                 ref={canvasRef}
                 className={`w-full h-full object-cover ${facingMode === 'user' ? 'transform -scale-x-100' : ''}`}
@@ -143,24 +145,42 @@ export default function TotenPage() {
               {/* Cyber Scanline Laser Effect */}
               <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-transparent via-cyan-400/10 to-transparent animate-scan" />
 
+              {/* Corner Sci-Fi Brackets */}
+              <div className="absolute top-3 left-3 w-6 h-6 border-t-2 border-l-2 border-cyan-400 pointer-events-none" />
+              <div className="absolute top-3 right-3 w-6 h-6 border-t-2 border-r-2 border-cyan-400 pointer-events-none" />
+              <div className="absolute bottom-3 left-3 w-6 h-6 border-b-2 border-l-2 border-cyan-400 pointer-events-none" />
+              <div className="absolute bottom-3 right-3 w-6 h-6 border-b-2 border-r-2 border-cyan-400 pointer-events-none" />
+
               {/* Top Banner Tag */}
-              <div className="absolute top-2.5 left-2.5 px-3 py-1 rounded-full bg-slate-900/85 backdrop-blur-md border border-cyan-500/40 text-[11px] font-bold text-cyan-300 flex items-center gap-1.5 uppercase tracking-wider shadow-lg">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                Scanner de Presença IA • Varredura
+              <div className="absolute top-3 left-3 ml-7 px-3.5 py-1.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-cyan-500/50 text-[11px] font-bold text-cyan-300 flex items-center gap-2 uppercase tracking-wider shadow-lg">
+                <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
+                <span>Scanner IA de Presença • Campo Aberto</span>
               </div>
 
-              {/* Bottom Subtitle / Tip */}
-              <div className="absolute bottom-2.5 inset-x-0 mx-auto text-center px-4">
-                <span className="inline-block px-3 py-1 rounded-lg bg-slate-900/85 backdrop-blur-md border border-white/10 text-xs text-slate-300 shadow-lg">
-                  👀 Aproxime-se do toten para interagir com o Sensei
-                </span>
+              {/* Quick Flip Camera Button in Feed */}
+              <button
+                onClick={toggleFacingMode}
+                className="absolute top-3 right-3 mr-7 px-3 py-1.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 hover:border-cyan-400 text-[11px] font-semibold text-slate-300 hover:text-white flex items-center gap-1.5 transition cursor-pointer shadow-lg"
+                title="Trocar Câmera Frontal / Traseira"
+              >
+                <SwitchCamera className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">{facingMode === 'user' ? 'Frontal' : 'Traseira'}</span>
+              </button>
+
+              {/* Bottom Guidance Box */}
+              <div className="absolute bottom-4 inset-x-0 mx-auto text-center px-4 pointer-events-none">
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900/90 backdrop-blur-md border border-cyan-500/30 text-xs sm:text-sm font-medium text-cyan-200 shadow-xl">
+                  <Eye className="w-4 h-4 text-cyan-400 animate-pulse shrink-0" />
+                  <span>Aproxime-se do toten para iniciar a interação com o Sensei</span>
+                </div>
               </div>
             </div>
           </div>
         ) : (
           /* Active Interactive Kaizen Mode */
-          <div className="w-full flex justify-center flex-1 items-center">
+          <div className="w-full flex justify-center flex-1 items-center py-2">
             <KaizenInteraction
+              personDetected={detection.hasPerson}
               onSpeak={speak}
               onStateChange={handleStateChange}
               onReturnToIdle={handleReturnToIdle}
@@ -174,7 +194,7 @@ export default function TotenPage() {
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-cyan-400" />
-            Toten Kiosk v1.2 • Gemini IA
+            Toten Kiosk v1.3 • Canal Kaizen & Gemini IA
           </span>
           <span>•</span>
           <span className="text-slate-400">Desenvolvido para Chão de Fábrica & Melhoria Contínua</span>
