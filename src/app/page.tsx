@@ -31,9 +31,11 @@ export default function TotenPage() {
 
     requestWakeLock();
 
-    // Register Service Worker for PWA
-    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
+    // Register Service Worker for PWA with auto-update
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').then((registration) => {
+        registration.update();
+      }).catch((err) => {
         console.warn("SW registration failed:", err);
       });
     }

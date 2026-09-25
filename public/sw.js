@@ -1,15 +1,11 @@
-const CACHE_NAME = 'sensei-toten-v1';
+const CACHE_NAME = 'sensei-toten-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
+  '/icon.svg',
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
-  );
   self.skipWaiting();
 });
 
@@ -28,12 +24,28 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Network-First Strategy: Always fetch freshest files from server first!
 self.addEventListener('fetch', (event) => {
-  // Pass through for camera/streaming and dynamic APIs
   if (event.request.method !== 'GET') return;
+
+  // Pass-through for API calls (Gemini)
+  if (event.request.url.includes('/api/')) {
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request).catch(() => cachedResponse);
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        return caches.match(event.request);
+      })
   );
 });
