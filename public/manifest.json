@@ -1,0 +1,22 @@
+{
+  "name": "Sensei Kaizen Toten",
+  "short_name": "Sensei Toten",
+  "description": "Toten Interativo com Visão Computacional e Melhoria Contínua",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#06b6d4",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
