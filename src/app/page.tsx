@@ -6,7 +6,7 @@ import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
 import { SenseiAvatar } from '../components/SenseiAvatar';
 import { RadarScanner } from '../components/RadarScanner';
 import { IdleScreensaver } from '../components/IdleScreensaver';
-import { KaizenInteraction } from '../components/KaizenInteraction';
+import { KaizenInteraction, InteractionView } from '../components/KaizenInteraction';
 import { CameraFeed } from '../components/CameraFeed';
 import { HeaderNav } from '../components/HeaderNav';
 import { SenseiState } from '../types';
@@ -14,6 +14,7 @@ import { SwitchCamera, Eye } from 'lucide-react';
 
 export default function TotenPage() {
   const [senseiState, setSenseiState] = useState<SenseiState>('idle');
+  const [interactionView, setInteractionView] = useState<InteractionView>('menu');
 
   const { speak, isMuted, toggleMute, isSpeaking } = useSpeechSynthesis();
 
@@ -52,8 +53,9 @@ export default function TotenPage() {
     setSenseiState(st);
   }, []);
 
-  // When a person enters camera vision
+  // When a person enters camera vision -> Always start at the Main Options Menu
   const handlePersonEnter = useCallback(() => {
+    setInteractionView('menu');
     setSenseiState((prev) => {
       if (prev === 'idle') return 'celebrating';
       return prev;
@@ -63,6 +65,7 @@ export default function TotenPage() {
   // When the person leaves and timeout expires (e.g. 15s absence)
   const handlePersonLeave = useCallback(() => {
     setSenseiState('idle');
+    setInteractionView('menu');
   }, []);
 
   const {
@@ -91,6 +94,7 @@ export default function TotenPage() {
   const handleReturnToIdle = useCallback(() => {
     resetPresence(3500);
     setSenseiState('idle');
+    setInteractionView('menu');
   }, [resetPresence]);
 
   return (
@@ -121,10 +125,14 @@ export default function TotenPage() {
 
       {/* Central Interactive Arena */}
       <div className="relative z-10 flex-1 flex flex-col items-center justify-between px-3 sm:px-6 py-3 sm:py-5 w-full max-w-5xl mx-auto">
-        {/* Upper Area: Sensei Mascot */}
+        {/* Upper Area: Sensei Mascot - Prominently Large in Menu & Idle */}
         <div className="w-full flex flex-col items-center justify-center flex-1">
-          <div className="mb-2 sm:mb-4">
-            <SenseiAvatar state={senseiState} isSpeaking={isSpeaking} />
+          <div className="mb-2 sm:mb-3">
+            <SenseiAvatar 
+              state={senseiState} 
+              isSpeaking={isSpeaking}
+              size={senseiState === 'idle' ? 'lg' : interactionView === 'menu' ? 'xl' : 'sm'}
+            />
           </div>
 
           {senseiState === 'idle' && (
@@ -134,7 +142,7 @@ export default function TotenPage() {
           )}
         </div>
 
-        {/* Dynamic Lower Area: Idle (Larger Lower Half Camera) vs Active (Kaizen Interaction) */}
+        {/* Dynamic Lower Area: Idle (Larger Lower Half Camera) vs Active (Kaizen Options Menu & Activities) */}
         {senseiState === 'idle' ? (
           /* Bottom Half: Prominent & High-Tech Camera Scanner Feed */
           <div className="w-full max-w-4xl px-2 sm:px-4 pb-2 sm:pb-4">
@@ -163,7 +171,7 @@ export default function TotenPage() {
               {/* Quick Flip Camera Button in Feed */}
               <button
                 onClick={toggleFacingMode}
-                className="absolute top-3 right-3 mr-7 px-3 py-1.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 hover:border-cyan-400 text-[11px] font-semibold text-slate-300 hover:text-white flex items-center gap-1.5 transition cursor-pointer shadow-lg"
+                className="absolute top-3 right-3 mr-7 px-3.5 py-1.5 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/10 hover:border-cyan-400 text-[11px] font-semibold text-slate-300 hover:text-white flex items-center gap-1.5 transition cursor-pointer shadow-lg"
                 title="Trocar Câmera Frontal / Traseira"
               >
                 <SwitchCamera className="w-3.5 h-3.5 text-cyan-400" />
@@ -180,13 +188,15 @@ export default function TotenPage() {
             </div>
           </div>
         ) : (
-          /* Active Interactive Kaizen Mode */
+          /* Active Interactive Mode: Menu Hub with Big Sensei and Options */
           <div className="w-full flex justify-center flex-1 items-center py-2">
             <KaizenInteraction
               personDetected={detection.hasPerson}
               onSpeak={speak}
               onStateChange={handleStateChange}
               onReturnToIdle={handleReturnToIdle}
+              activeView={interactionView}
+              onViewChange={setInteractionView}
             />
           </div>
         )}

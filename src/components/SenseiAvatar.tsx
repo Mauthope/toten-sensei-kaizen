@@ -3,14 +3,18 @@
 import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SenseiState } from '../types';
-import Image from 'next/image';
 
 interface SenseiAvatarProps {
   state: SenseiState;
   isSpeaking?: boolean;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
-export const SenseiAvatar = React.memo(function SenseiAvatar({ state, isSpeaking = false }: SenseiAvatarProps) {
+export const SenseiAvatar = React.memo(function SenseiAvatar({ 
+  state, 
+  isSpeaking = false,
+  size = 'lg'
+}: SenseiAvatarProps) {
   // Determine active sprite source
   const spriteSrc = useMemo(() => {
     switch (state) {
@@ -49,8 +53,23 @@ export const SenseiAvatar = React.memo(function SenseiAvatar({ state, isSpeaking
     }
   }, [state, isSpeaking]);
 
+  // Responsive size dimensions
+  const sizeClass = useMemo(() => {
+    switch (size) {
+      case 'sm':
+        return 'w-36 h-40 sm:w-44 sm:h-48 md:w-48 md:h-52';
+      case 'md':
+        return 'w-48 h-56 sm:w-60 sm:h-68 md:w-68 md:h-76';
+      case 'xl':
+        return 'w-72 h-80 sm:w-88 sm:h-96 md:w-96 md:h-[400px] lg:w-[420px] lg:h-[440px]';
+      case 'lg':
+      default:
+        return 'w-64 h-72 sm:w-76 sm:h-84 md:w-84 md:h-96';
+    }
+  }, [size]);
+
   return (
-    <div className="relative flex flex-col items-center justify-center select-none w-64 h-72 sm:w-76 sm:h-84 md:w-84 md:h-96">
+    <div className={`relative flex flex-col items-center justify-center select-none transition-all duration-300 ${sizeClass}`}>
       {/* Background Soft Glow Aura (matches Toten Dark Slate #0f172a) */}
       <div 
         className={`absolute inset-0 rounded-full blur-3xl transition-all duration-700 pointer-events-none ${auraClass}`}

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
 import { SenseiState, CanalKaizenIdea } from '../types';
+import { KAIZEN_PILLS } from '../lib/kaizenData';
 import { 
   Lightbulb, 
   Sparkles, 
@@ -18,27 +19,46 @@ import {
   FileCheck,
   CheckCircle2,
   RefreshCw,
-  MessageSquare,
   Bot,
   Volume2,
-  ArrowRight
+  ArrowRight,
+  BookOpen,
+  Trophy,
+  ArrowLeft,
+  Flame,
+  Check,
+  Compass
 } from 'lucide-react';
+
+export type InteractionView = 'menu' | 'canal_kaizen' | 'aula' | 'desafio' | 'chat' | 'lista_ideias';
 
 interface KaizenInteractionProps {
   personDetected?: boolean;
   onSpeak: (text: string) => void;
   onStateChange: (state: SenseiState) => void;
   onReturnToIdle: () => void;
+  activeView?: InteractionView;
+  onViewChange?: (view: InteractionView) => void;
 }
 
 export function KaizenInteraction({ 
   personDetected = true, 
   onSpeak, 
   onStateChange, 
-  onReturnToIdle 
+  onReturnToIdle,
+  activeView: controlledView,
+  onViewChange
 }: KaizenInteractionProps) {
-  // Navigation tabs: 'idea' (Canal Kaizen), 'chat' (Sensei IA), 'list' (Ideias Cadastradas)
-  const [activeTab, setActiveTab] = useState<'idea' | 'chat' | 'list'>('idea');
+  // Navigation: 'menu' (Default Hub), 'canal_kaizen', 'aula', 'desafio', 'chat', 'lista_ideias'
+  const [internalView, setInternalView] = useState<InteractionView>('menu');
+  const activeView = controlledView ?? internalView;
+
+  const setView = useCallback((newView: InteractionView) => {
+    setInternalView(newView);
+    if (onViewChange) {
+      onViewChange(newView);
+    }
+  }, [onViewChange]);
 
   // ==========================================
   // CANAL KAIZEN (IDEAS) STATES
@@ -48,7 +68,7 @@ export function KaizenInteraction({
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [isStructuring, setIsStructuring] = useState(false);
 
-  // Form fields for review & confirmation
+  // Form fields for proposal
   const [ideaTitle, setIdeaTitle] = useState('');
   const [ideaCategory, setIdeaCategory] = useState('5S & Organização');
   const [ideaProblem, setIdeaProblem] = useState('');
@@ -67,10 +87,20 @@ export function KaizenInteraction({
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [isChatListening, setIsChatListening] = useState(false);
 
+  // ==========================================
+  // AULA COM O SENSEI (PILLS) STATES
+  // ==========================================
+  const [currentPillIndex, setCurrentPillIndex] = useState(0);
+
+  // ==========================================
+  // DESAFIO 5S STATES
+  // ==========================================
+  const [hasAcceptedChallenge, setHasAcceptedChallenge] = useState(false);
+
   // Recognition reference
   const recognitionRef = useRef<any>(null);
 
-  // Refs for callbacks to prevent unnecessary effect triggers
+  // Refs for callbacks
   const onReturnToIdleRef = useRef(onReturnToIdle);
   onReturnToIdleRef.current = onReturnToIdle;
 
@@ -99,54 +129,44 @@ export function KaizenInteraction({
     if (hasCelebratedRef.current) return;
     hasCelebratedRef.current = true;
 
-    // 1. Confetti explosion
+    // Confetti explosion
     confetti({
       particleCount: 80,
       spread: 75,
-      origin: { y: 0.45 }
+      origin: { y: 0.4 }
     });
-    setTimeout(() => {
-      confetti({
-        particleCount: 45,
-        spread: 90,
-        origin: { y: 0.5 }
-      });
-    }, 200);
 
     onStateChangeRef.current('celebrating');
 
-    // 2. Energetic welcome phrases
-    const greetings = [
-      "Ei você aí! Sabe o que é Kaizen? Vem aqui que posso te ensinar!",
-      "Aha, te vi! O Sensei preparou novidades para o seu turno de hoje!",
-      "Vem aqui, campeão! Tem alguma ideia ou dúvida sobre melhoria contínua?",
-      "Parado aí! O Sensei está a postos para receber sua sugestão de melhoria!"
-    ];
-    const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-
-    onSpeakRef.current(`${randomGreeting} Cadastre sua ideia no Canal Kaizen ou converse com o Sensei!`);
+    // Welcoming party greeting inviting the user to choose an option
+    const welcomeSpeech = "Olá, campeão! Sou o Sensei Kaizen! Toque na tela para escolher: cadastrar uma ideia, ter uma aula rápida, aceitar um desafio ou conversar comigo!";
+    onSpeakRef.current(welcomeSpeech);
 
     setTimeout(() => {
-      onStateChangeRef.current('idea');
+      onStateChangeRef.current('interacting');
     }, 2000);
   }, []);
 
-  // Synchronize Mascot sprite with the active view
+  // Synchronize Mascot sprite with active view
   useEffect(() => {
     if (!hasCelebratedRef.current) return;
 
-    if (activeTab === 'idea') {
+    if (activeView === 'canal_kaizen') {
       if (ideaPhase === 'success') {
         onStateChangeRef.current('success');
       } else {
         onStateChangeRef.current('idea');
       }
-    } else if (activeTab === 'chat') {
+    } else if (activeView === 'desafio' && hasAcceptedChallenge) {
+      onStateChangeRef.current('success');
+    } else if (activeView === 'aula') {
+      onStateChangeRef.current('interacting');
+    } else if (activeView === 'chat') {
       onStateChangeRef.current('interacting');
     } else {
       onStateChangeRef.current('interacting');
     }
-  }, [activeTab, ideaPhase]);
+  }, [activeView, ideaPhase, hasAcceptedChallenge]);
 
   // Clean up any active speech recognition on unmount
   useEffect(() => {
@@ -160,7 +180,7 @@ export function KaizenInteraction({
   }, []);
 
   // ==========================================
-  // AUTOMATIC IDEA STRUCTURING
+  // CANAL KAIZEN LOGIC
   // ==========================================
   const structureIdeaProposal = async (text: string) => {
     if (!text.trim()) return;
@@ -194,7 +214,6 @@ export function KaizenInteraction({
           onSpeak("Ideia interpretada com sucesso! Dê uma olhada na proposta e confirme o envio.");
         }
       } else {
-        // Fallback structuring
         setIdeaTitle(`Melhoria Kaizen: ${text.slice(0, 36)}...`);
         setIdeaProblem(text);
         setIdeaSolution("Implementar dispositivo ou rotina padrão.");
@@ -214,7 +233,6 @@ export function KaizenInteraction({
     }
   };
 
-  // Toggle Voice Recording for Canal Kaizen Idea
   const toggleVoiceRecordingForIdea = useCallback(() => {
     if (typeof window === 'undefined') return;
     const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -240,14 +258,10 @@ export function KaizenInteraction({
       const transcript = event.results[0][0].transcript;
       setRawIdeaInput(transcript);
       setIsVoiceRecording(false);
-      // Automatically triggers proposal structuring without extra clicks!
       structureIdeaProposal(transcript);
     };
 
-    recognition.onerror = (e: any) => {
-      console.warn("Speech error:", e);
-      setIsVoiceRecording(false);
-    };
+    recognition.onerror = () => setIsVoiceRecording(false);
     recognition.onend = () => setIsVoiceRecording(false);
     recognitionRef.current = recognition;
 
@@ -259,7 +273,6 @@ export function KaizenInteraction({
     }
   }, [isVoiceRecording]);
 
-  // Submit Finalized Idea
   const handleConfirmIdeaSubmission = (e: React.FormEvent) => {
     e.preventDefault();
     if (!ideaTitle.trim() || !ideaProblem.trim()) return;
@@ -300,11 +313,11 @@ export function KaizenInteraction({
       origin: { y: 0.55 }
     });
 
-    onSpeak(`Parabéns! Sua ideia foi cadastrada no Canal Kaizen sob o protocolo ${newProtocol}! Obrigado por construir uma fábrica melhor!`);
+    onSpeak(`Parabéns! Sua ideia foi cadastrada no Canal Kaizen com o protocolo ${newProtocol}! Obrigado por construir uma fábrica melhor!`);
   };
 
   // ==========================================
-  // SENSEI IA CHAT / CONSULTATION
+  // SENSEI IA CHAT LOGIC
   // ==========================================
   const handleAskSensei = async (questionText?: string) => {
     const textToSend = questionText || chatInput;
@@ -344,7 +357,6 @@ export function KaizenInteraction({
     }
   };
 
-  // Voice recording for Sensei IA Chat
   const toggleSpeechForChat = useCallback(() => {
     if (typeof window === 'undefined') return;
     const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -388,66 +400,42 @@ export function KaizenInteraction({
   return (
     <div className="w-full max-w-4xl mx-auto px-2 sm:px-4 z-20">
       
-      {/* Top Bar: Clean Status + Direct Segmented Navigation + Conclude */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3 bg-slate-900/90 backdrop-blur-xl border border-white/10 px-3 sm:px-4 py-2 rounded-2xl shadow-xl">
-        {/* Presence indicator */}
-        <div className="flex items-center gap-2">
-          <span className={`w-2.5 h-2.5 rounded-full ${personDetected ? 'bg-emerald-400 shadow-[0_0_10px_#34d399] animate-pulse' : 'bg-amber-400'}`} />
-          <span className="text-xs font-semibold text-slate-300">
-            {personDetected ? 'Operador Presente' : 'Aguardando Operador...'}
-          </span>
-        </div>
-
-        {/* Center: Clean 3-Tab Segmented Switcher */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-950/70 border border-white/10 text-xs">
-          {/* TAB 1: CANAL KAIZEN (HERO HIGHLIGHT) */}
+      {/* Top Session Bar */}
+      <div className="flex items-center justify-between gap-2.5 mb-3 bg-slate-900/90 backdrop-blur-xl border border-white/10 px-3 sm:px-4 py-2 rounded-2xl shadow-xl">
+        {/* Left: Presence / Return to Menu Button */}
+        {activeView === 'menu' ? (
+          <div className="flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full ${personDetected ? 'bg-emerald-400 shadow-[0_0_10px_#34d399] animate-pulse' : 'bg-amber-400'}`} />
+            <span className="text-xs font-semibold text-slate-300">
+              {personDetected ? 'Operador Presente • Escolha uma Opção' : 'Aguardando Operador...'}
+            </span>
+          </div>
+        ) : (
           <button
-            onClick={() => {
-              setActiveTab('idea');
-              setIdeaPhase('input');
-            }}
-            className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'idea'
-                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.4)]'
-                : 'text-amber-400 hover:text-amber-300 hover:bg-white/5'
-            }`}
+            onClick={() => setView('menu')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-cyan-300 hover:text-white transition cursor-pointer border border-white/10 shadow-sm"
           >
-            <Lightbulb className="w-4 h-4 shrink-0" />
-            <span>Cadastrar Ideia</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Voltar ao Menu Principal</span>
           </button>
+        )}
 
-          {/* TAB 2: SENSEI IA CHAT */}
-          <button
-            onClick={() => setActiveTab('chat')}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'chat'
-                ? 'bg-cyan-500 text-slate-950 font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)]'
-                : 'text-cyan-300 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Bot className="w-4 h-4 shrink-0" />
-            <span>Falar com Sensei IA</span>
-          </button>
+        {/* Center: Current Section Indicator (when inside a subview) */}
+        {activeView !== 'menu' && (
+          <div className="hidden sm:flex items-center gap-1.5 text-xs font-bold text-slate-300">
+            {activeView === 'canal_kaizen' && <span className="text-amber-400 flex items-center gap-1"><Lightbulb className="w-3.5 h-3.5" /> Canal Kaizen</span>}
+            {activeView === 'aula' && <span className="text-cyan-400 flex items-center gap-1"><BookOpen className="w-3.5 h-3.5" /> Aula com Sensei</span>}
+            {activeView === 'desafio' && <span className="text-emerald-400 flex items-center gap-1"><Trophy className="w-3.5 h-3.5" /> Desafio 5S</span>}
+            {activeView === 'chat' && <span className="text-purple-400 flex items-center gap-1"><Bot className="w-3.5 h-3.5" /> Conversar com Sensei</span>}
+            {activeView === 'lista_ideias' && <span className="text-blue-400 flex items-center gap-1"><ListFilter className="w-3.5 h-3.5" /> Banco de Ideias</span>}
+          </div>
+        )}
 
-          {/* TAB 3: REGISTERED IDEAS LIST */}
-          <button
-            onClick={() => setActiveTab('list')}
-            className={`px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1 cursor-pointer ${
-              activeTab === 'list'
-                ? 'bg-slate-800 text-white font-bold border border-white/15'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-            }`}
-          >
-            <ListFilter className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden sm:inline">Ideias</span> ({registeredIdeas.length})
-          </button>
-        </div>
-
-        {/* Right: Quick Conclude Session */}
+        {/* Right: Conclude session button */}
         <button
           onClick={onReturnToIdle}
           className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-red-500/20 border border-white/10 hover:border-red-500/40 text-xs font-semibold text-slate-300 hover:text-red-300 transition flex items-center gap-1 cursor-pointer"
-          title="Encerrar sessão interativa"
+          title="Encerrar sessão e voltar ao descanso"
         >
           <X className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Encerrar</span>
@@ -457,38 +445,210 @@ export function KaizenInteraction({
       <AnimatePresence mode="wait">
         
         {/* ========================================================================= */}
-        {/* TAB 1: CANAL KAIZEN (CADASTRAR IDEIA) - CLEAN, DIRECT & ACCESSIBLE        */}
+        {/* MAIN MENU HUB (SENSEI GRANDE COM VÁRIAS OPÇÕES EM BOTÕES)                 */}
         {/* ========================================================================= */}
-        {activeTab === 'idea' && (
+        {activeView === 'menu' && (
           <motion.div
-            key="tab_idea"
-            initial={{ opacity: 0, y: 12, scale: 0.99 }}
+            key="view_menu"
+            initial={{ opacity: 0, y: 15, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -12, scale: 0.99 }}
+            exit={{ opacity: 0, y: -15, scale: 0.98 }}
             className="bg-slate-900/90 backdrop-blur-2xl border border-white/15 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden"
           >
-            {/* Top Glowing Amber Line */}
+            {/* Top Cyan Glowing Line */}
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-400 via-cyan-400 to-purple-500" />
+
+            {/* Menu Header Welcome Banner */}
+            <div className="text-center max-w-xl mx-auto mb-5">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 mb-2">
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                Menu Interativo do Sensei
+              </div>
+              <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                Olá! O que vamos fazer juntos hoje?
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 mt-1">
+                Toque em uma das opções abaixo para iniciar:
+              </p>
+            </div>
+
+            {/* Grid of Large Interactive Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-4">
+              
+              {/* BUTTON 1: CANAL KAIZEN (CADASTRAR IDEIA) - HERO HIGHLIGHT */}
+              <button
+                type="button"
+                onClick={() => {
+                  setView('canal_kaizen');
+                  setIdeaPhase('input');
+                }}
+                className="group relative p-5 rounded-2xl bg-gradient-to-br from-amber-500/15 via-slate-900 to-yellow-500/10 hover:from-amber-500/25 hover:to-yellow-500/20 border-2 border-amber-400/50 hover:border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.2)] text-left transition-all duration-300 cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="p-2.5 rounded-xl bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/30 group-hover:scale-105 transition">
+                      <Lightbulb className="w-6 h-6" />
+                    </span>
+                    <span className="text-[10px] font-extrabold tracking-wider uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full">
+                      ★ Destaque
+                    </span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-amber-300 transition mb-1">
+                    💡 Canal Kaizen (Cadastrar Ideia)
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Viu um desperdício ou tem uma solução para o posto? Fale no microfone e o Sensei IA estrutura sua proposta com protocolo!
+                  </p>
+                </div>
+                <div className="mt-3 flex items-center text-xs font-bold text-amber-400 group-hover:translate-x-1 transition">
+                  <span>Cadastrar ideia por voz ou texto</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                </div>
+              </button>
+
+              {/* BUTTON 2: AULA COM O SENSEI (PÍLULAS KAIZEN & 5S) */}
+              <button
+                type="button"
+                onClick={() => setView('aula')}
+                className="group relative p-5 rounded-2xl bg-gradient-to-br from-cyan-500/15 via-slate-900 to-blue-500/10 hover:from-cyan-500/25 hover:to-blue-500/20 border-2 border-cyan-400/40 hover:border-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.15)] text-left transition-all duration-300 cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="p-2.5 rounded-xl bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/30 group-hover:scale-105 transition">
+                      <BookOpen className="w-6 h-6" />
+                    </span>
+                    <span className="text-[10px] font-extrabold tracking-wider uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 rounded-full">
+                      1 Minuto
+                    </span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-cyan-300 transition mb-1">
+                    🥋 Aula com o Sensei (5S & Lean)
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Ouça lições rápidas sobre os 5S, Poka-Yoke, Gemba e os 8 Desperdícios industriais explicadas em áudio.
+                  </p>
+                </div>
+                <div className="mt-3 flex items-center text-xs font-bold text-cyan-400 group-hover:translate-x-1 transition">
+                  <span>Ver pílulas de conhecimento</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                </div>
+              </button>
+
+              {/* BUTTON 3: DESAFIOS 5S DO TURNO */}
+              <button
+                type="button"
+                onClick={() => {
+                  setHasAcceptedChallenge(false);
+                  setView('desafio');
+                }}
+                className="group relative p-5 rounded-2xl bg-gradient-to-br from-emerald-500/15 via-slate-900 to-teal-500/10 hover:from-emerald-500/25 hover:to-teal-500/20 border-2 border-emerald-400/40 hover:border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.15)] text-left transition-all duration-300 cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="p-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/30 group-hover:scale-105 transition">
+                      <Trophy className="w-6 h-6" />
+                    </span>
+                    <span className="text-[10px] font-extrabold tracking-wider uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full">
+                      Missão Rápida
+                    </span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-emerald-300 transition mb-1">
+                    🏆 Desafio 5S do Turno
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Aceite uma missão prática de 2 minutos para aplicar no seu posto de trabalho agora mesmo e ganhe pontos Kaizen!
+                  </p>
+                </div>
+                <div className="mt-3 flex items-center text-xs font-bold text-emerald-400 group-hover:translate-x-1 transition">
+                  <span>Aceitar missão de 2 minutos</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                </div>
+              </button>
+
+              {/* BUTTON 4: CONVERSAR COM O SENSEI IA */}
+              <button
+                type="button"
+                onClick={() => setView('chat')}
+                className="group relative p-5 rounded-2xl bg-gradient-to-br from-purple-500/15 via-slate-900 to-indigo-500/10 hover:from-purple-500/25 hover:to-indigo-500/20 border-2 border-purple-400/40 hover:border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.15)] text-left transition-all duration-300 cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="p-2.5 rounded-xl bg-purple-500 text-white font-bold shadow-md shadow-purple-500/30 group-hover:scale-105 transition">
+                      <Bot className="w-6 h-6" />
+                    </span>
+                    <span className="text-[10px] font-extrabold tracking-wider uppercase bg-purple-500/20 text-purple-300 border border-purple-500/40 px-2 py-0.5 rounded-full">
+                      Voz & Resposta
+                    </span>
+                  </div>
+                  <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-purple-300 transition mb-1">
+                    💬 Tirar Dúvidas com o Sensei
+                  </h3>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Pergunte qualquer coisa sobre bancadas, 5S, máquinas, segurança ou qualidade por voz ou texto.
+                  </p>
+                </div>
+                <div className="mt-3 flex items-center text-xs font-bold text-purple-400 group-hover:translate-x-1 transition">
+                  <span>Falar com o Sensei por microfone</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                </div>
+              </button>
+
+            </div>
+
+            {/* Bottom Row: Quick Ideas Counter & Audio Repeat */}
+            <div className="pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+              <button
+                type="button"
+                onClick={() => setView('lista_ideias')}
+                className="hover:text-cyan-300 flex items-center gap-1.5 transition cursor-pointer font-medium"
+              >
+                <ListFilter className="w-4 h-4 text-cyan-400" />
+                <span>Ver Banco de Ideias ({registeredIdeas.length} cadastradas)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onSpeak("Olá, campeão! Toque na opção desejada para cadastrar ideias, ter aulas com o Sensei, fazer desafios ou tirar dúvidas!")}
+                className="hover:text-white flex items-center gap-1.5 transition cursor-pointer font-medium"
+              >
+                <Volume2 className="w-4 h-4 text-amber-400" />
+                <span>Ouvir Ajuda do Sensei</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* SUBVIEW 1: CANAL KAIZEN (CADASTRAR IDEIA)                                 */}
+        {/* ========================================================================= */}
+        {activeView === 'canal_kaizen' && (
+          <motion.div
+            key="view_canal_kaizen"
+            initial={{ opacity: 0, y: 15, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -15, scale: 0.98 }}
+            className="bg-slate-900/90 backdrop-blur-2xl border border-white/15 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden"
+          >
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500" />
 
-            {/* PHASE 1: INPUT BY VOICE OR TYPING */}
+            {/* PHASE 1: INPUT */}
             {ideaPhase === 'input' && (
               <div>
-                {/* Header */}
-                <div className="text-center max-w-2xl mx-auto mb-6">
+                <div className="text-center max-w-2xl mx-auto mb-5">
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/30 mb-2">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    Canal Kaizen • Sua Ideia Valorizada
+                    <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
+                    Canal Kaizen • Nova Ideia de Melhoria
                   </div>
-                  <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                  <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
                     O que podemos melhorar no seu posto de trabalho hoje?
-                  </h2>
+                  </h3>
                   <p className="text-xs sm:text-sm text-slate-300 mt-1">
-                    Toque no microfone e fale livremente. O <strong className="text-amber-300">Sensei IA</strong> interpreta sua voz e estrutura a proposta automaticamente!
+                    Grave sua ideia no microfone ou digite abaixo. O <strong className="text-amber-300">Sensei IA</strong> estrutura automaticamente sua proposta!
                   </p>
                 </div>
 
-                {/* Big Glowing Voice Record Button Hero */}
-                <div className="bg-slate-950/70 border border-white/10 rounded-3xl p-6 sm:p-8 text-center mb-5 relative overflow-hidden">
+                {/* Big Voice Recording Button */}
+                <div className="bg-slate-950/70 border border-white/10 rounded-3xl p-6 sm:p-7 text-center mb-5 relative overflow-hidden">
                   <button
                     type="button"
                     onClick={toggleVoiceRecordingForIdea}
@@ -529,7 +689,7 @@ export function KaizenInteraction({
                       </div>
                     ) : (
                       <p className="text-xs sm:text-sm text-slate-400">
-                        Toque no botão e diga qual problema você viu ou como gostaria de resolver.
+                        Toque no microfone e diga qual problema você viu ou como gostaria de resolver.
                       </p>
                     )}
                   </div>
@@ -538,19 +698,17 @@ export function KaizenInteraction({
                 {/* Direct Typing Alternative */}
                 {!isStructuring && (
                   <div className="space-y-3">
-                    <div className="relative">
-                      <textarea
-                        value={rawIdeaInput}
-                        onChange={(e) => setRawIdeaInput(e.target.value)}
-                        placeholder="Ou digite sua sugestão aqui... (ex: na linha 3 falta suporte para o leitor de código de barras, isso atrasa o bip das peças)"
-                        rows={2}
-                        className="w-full bg-slate-950/70 border border-white/10 rounded-2xl p-3.5 text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:border-amber-400 transition"
-                      />
-                    </div>
+                    <textarea
+                      value={rawIdeaInput}
+                      onChange={(e) => setRawIdeaInput(e.target.value)}
+                      placeholder="Ou digite sua sugestão de melhoria aqui..."
+                      rows={2}
+                      className="w-full bg-slate-950/70 border border-white/10 rounded-2xl p-3.5 text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:border-amber-400 transition"
+                    />
 
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-slate-400">
-                        ⚡ Ideias práticas e simples são as mais bem avaliadas no comitê.
+                        ⚡ Ideias práticas e simples são as mais valorizadas.
                       </span>
 
                       <button
@@ -568,7 +726,7 @@ export function KaizenInteraction({
               </div>
             )}
 
-            {/* PHASE 2: REVIEW & EDIT (CLEAN PROPOSAL CARD) */}
+            {/* PHASE 2: REVIEW & EDIT */}
             {ideaPhase === 'review' && (
               <form onSubmit={handleConfirmIdeaSubmission} className="space-y-4">
                 <div className="flex items-center justify-between gap-3 bg-amber-500/15 border border-amber-500/30 rounded-2xl p-3.5">
@@ -581,15 +739,13 @@ export function KaizenInteraction({
                   </div>
                 </div>
 
-                {/* Original Audio Transcription */}
                 {rawIdeaInput && (
                   <div className="bg-slate-950/60 border border-white/5 rounded-xl px-3.5 py-2 text-xs text-slate-400">
-                    <span className="font-semibold text-slate-300 block mb-0.5">🎙️ O que você disse:</span>
+                    <span className="font-semibold text-slate-300 block mb-0.5">🎙️ Transcrição da sua fala:</span>
                     <span className="italic text-slate-300">&ldquo;{rawIdeaInput}&rdquo;</span>
                   </div>
                 )}
 
-                {/* Title & Category Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-300 mb-1">
@@ -623,7 +779,6 @@ export function KaizenInteraction({
                   </div>
                 </div>
 
-                {/* Problem Description */}
                 <div>
                   <label className="block text-xs font-semibold text-red-300 mb-1">
                     Problema / Oportunidade Identificada:
@@ -637,10 +792,9 @@ export function KaizenInteraction({
                   />
                 </div>
 
-                {/* Solution */}
                 <div>
                   <label className="block text-xs font-semibold text-emerald-300 mb-1">
-                    Solução Proposta (Ação Prática):
+                    Solução Proposta:
                   </label>
                   <textarea
                     value={ideaSolution}
@@ -651,7 +805,6 @@ export function KaizenInteraction({
                   />
                 </div>
 
-                {/* Benefits */}
                 <div>
                   <label className="block text-xs font-semibold text-cyan-300 mb-1">
                     Benefício Esperado:
@@ -664,7 +817,6 @@ export function KaizenInteraction({
                   />
                 </div>
 
-                {/* Author & Department */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-400 mb-1 flex items-center gap-1">
@@ -693,7 +845,6 @@ export function KaizenInteraction({
                   </div>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="pt-3 border-t border-white/10 flex flex-wrap justify-between items-center gap-3">
                   <button
                     type="button"
@@ -708,13 +859,13 @@ export function KaizenInteraction({
                     className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-sm transition cursor-pointer flex items-center gap-2 shadow-lg shadow-emerald-500/30"
                   >
                     <FileCheck className="w-4 h-4 text-slate-950" />
-                    Confirmar e Cadastrar no Canal Kaizen
+                    Confirmar e Cadastrar Ideia
                   </button>
                 </div>
               </form>
             )}
 
-            {/* PHASE 3: SUCCESS CONFIRMATION */}
+            {/* PHASE 3: SUCCESS */}
             {ideaPhase === 'success' && lastSubmittedIdea && (
               <div className="text-center py-4">
                 <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center mx-auto mb-3 shadow-[0_0_25px_rgba(52,211,153,0.35)]">
@@ -722,7 +873,7 @@ export function KaizenInteraction({
                 </div>
 
                 <h3 className="text-xl sm:text-2xl font-bold text-white mb-1">
-                  Ideia Registrada com Sucesso!
+                  Ideia Registrada no Canal Kaizen!
                 </h3>
                 
                 <div className="inline-block px-4 py-1.5 rounded-full bg-cyan-950 border border-cyan-500/40 text-cyan-300 font-mono font-bold text-sm my-2 shadow-md">
@@ -730,7 +881,7 @@ export function KaizenInteraction({
                 </div>
 
                 <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto mb-5 leading-relaxed">
-                  Obrigado, <strong className="text-white">{lastSubmittedIdea.authorName}</strong>! Sua proposta foi enviada diretamente para a comissão de melhorias contínuas.
+                  Obrigado, <strong className="text-white">{lastSubmittedIdea.authorName}</strong>! Sua proposta foi enviada para o comitê de melhoria contínua.
                 </p>
 
                 <div className="bg-slate-950/70 border border-white/10 rounded-2xl p-4 max-w-md mx-auto mb-6 text-left text-xs">
@@ -755,10 +906,10 @@ export function KaizenInteraction({
                   </button>
 
                   <button
-                    onClick={() => setActiveTab('list')}
+                    onClick={() => setView('menu')}
                     className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center gap-1.5"
                   >
-                    <ListFilter className="w-4 h-4 text-cyan-400" /> Ver Banco de Ideias
+                    Voltar ao Menu
                   </button>
 
                   <button
@@ -774,44 +925,215 @@ export function KaizenInteraction({
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 2: CONVERSAR COM SENSEI IA - DIRECT, FAST & INSPIRATIONAL             */}
+        {/* SUBVIEW 2: AULA COM O SENSEI (PÍLULAS KAIZEN & 5S)                        */}
         {/* ========================================================================= */}
-        {activeTab === 'chat' && (
+        {activeView === 'aula' && (
           <motion.div
-            key="tab_chat"
-            initial={{ opacity: 0, y: 12, scale: 0.99 }}
+            key="view_aula"
+            initial={{ opacity: 0, y: 15, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -12, scale: 0.99 }}
+            exit={{ opacity: 0, y: -15, scale: 0.98 }}
             className="bg-slate-900/90 backdrop-blur-2xl border border-white/15 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden"
           >
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-cyan-400" />
 
-            {/* Header */}
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                <BookOpen className="w-3.5 h-3.5" />
+                Lição {currentPillIndex + 1} de {KAIZEN_PILLS.length} • {KAIZEN_PILLS[currentPillIndex].tag}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => onSpeak(`${KAIZEN_PILLS[currentPillIndex].title}. ${KAIZEN_PILLS[currentPillIndex].content}`)}
+                className="px-3 py-1 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-xs font-bold text-cyan-300 transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Volume2 className="w-3.5 h-3.5" /> Ouvir Aula 🔊
+              </button>
+            </div>
+
+            <h3 className="text-xl sm:text-2xl font-extrabold text-white mb-1">
+              {KAIZEN_PILLS[currentPillIndex].title}
+            </h3>
+            <p className="text-xs sm:text-sm font-medium text-cyan-300 mb-4">
+              {KAIZEN_PILLS[currentPillIndex].subtitle}
+            </p>
+
+            <div className="bg-slate-950/70 border border-white/10 rounded-2xl p-4 sm:p-5 mb-4 text-slate-200 text-sm sm:text-base leading-relaxed">
+              {KAIZEN_PILLS[currentPillIndex].content}
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/25 rounded-2xl p-3.5 mb-5 text-xs sm:text-sm text-amber-300">
+              {KAIZEN_PILLS[currentPillIndex].tip}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/10">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const prevIdx = (currentPillIndex - 1 + KAIZEN_PILLS.length) % KAIZEN_PILLS.length;
+                    setCurrentPillIndex(prevIdx);
+                    onSpeak(`${KAIZEN_PILLS[prevIdx].title}. ${KAIZEN_PILLS[prevIdx].content}`);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 hover:text-white transition cursor-pointer"
+                >
+                  ← Anterior
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextIdx = (currentPillIndex + 1) % KAIZEN_PILLS.length;
+                    setCurrentPillIndex(nextIdx);
+                    onSpeak(`${KAIZEN_PILLS[nextIdx].title}. ${KAIZEN_PILLS[nextIdx].content}`);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-xs font-bold text-slate-950 transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-cyan-500/20"
+                >
+                  <span>Próxima Lição</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setView('canal_kaizen');
+                  setIdeaCategory(currentPillIndex === 1 ? '5S & Organização' : currentPillIndex === 2 ? 'Eliminação de Desperdício' : 'Qualidade & Poka-Yoke');
+                  setIdeaPhase('input');
+                }}
+                className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
+                <span>Aplicar e Cadastrar Ideia</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* SUBVIEW 3: DESAFIOS 5S DO TURNO (MISSÃO DE 2 MINUTOS)                     */}
+        {/* ========================================================================= */}
+        {activeView === 'desafio' && (
+          <motion.div
+            key="view_desafio"
+            initial={{ opacity: 0, y: 15, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -15, scale: 0.98 }}
+            className="bg-slate-900/90 backdrop-blur-2xl border border-white/15 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-400" />
+
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                <Trophy className="w-3.5 h-3.5" />
+                Desafio 5S do Turno • Meta Rápida
+              </span>
+              <span className="text-xs text-slate-400">⏱️ Duração: 2 minutos</span>
+            </div>
+
+            <h3 className="text-xl sm:text-2xl font-extrabold text-white mb-2">
+              Missão de Hoje: Seiri & Seiton (Descarte e Lugar Certo)
+            </h3>
+            <p className="text-slate-300 text-xs sm:text-sm mb-5 leading-relaxed">
+              Dê uma olhada na sua estação de trabalho agora. Identifique <strong className="text-emerald-400">1 objeto, papel ou ferramenta</strong> que não tem mais utilidade ou está fora do lugar padrão. Guarde-o no local correto ou descarte adequadamente!
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+              <div className="bg-slate-950/60 border border-white/10 rounded-2xl p-4 flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-white">Mais Espaço e Menos Fadiga</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">Eliminar o que atrapalha reduz o cansaço visual e poupa até 15 minutos procurando ferramentas.</p>
+                </div>
+              </div>
+              <div className="bg-slate-950/60 border border-white/10 rounded-2xl p-4 flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-white">Segurança em Primeiro Lugar</h4>
+                  <p className="text-xs text-slate-400 mt-0.5">Piso e bancadas limpas previnem tropeços, cortes e acidentes no setor.</p>
+                </div>
+              </div>
+            </div>
+
+            {hasAcceptedChallenge ? (
+              <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-400/50 text-center mb-4">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/30 flex items-center justify-center mx-auto mb-2 text-emerald-300">
+                  <Check className="w-6 h-6" />
+                </div>
+                <h4 className="text-base font-bold text-white mb-1">Missão Aceita com Honra!</h4>
+                <p className="text-xs text-emerald-200">
+                  Execute no seu posto agora. Ao final do turno você sentirá a diferença!
+                </p>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setView('menu')}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 hover:text-white transition cursor-pointer"
+              >
+                Voltar ao Menu
+              </button>
+
+              {!hasAcceptedChallenge ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHasAcceptedChallenge(true);
+                    confetti({ particleCount: 110, spread: 90, origin: { y: 0.6 } });
+                    onSpeak("Missão aceita! Excelente atitude guerreiro Kaizen! Aplique no seu posto e tenha um ótimo turno!");
+                  }}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs sm:text-sm font-extrabold transition shadow-lg shadow-emerald-500/25 cursor-pointer flex items-center gap-2"
+                >
+                  <Trophy className="w-4 h-4 text-slate-950" />
+                  Aceitar Desafio!
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView('canal_kaizen');
+                    setIdeaPhase('input');
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-bold transition shadow-lg shadow-amber-500/25 cursor-pointer flex items-center gap-2"
+                >
+                  <Lightbulb className="w-4 h-4" />
+                  Cadastrar Melhoria no Posto
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* SUBVIEW 4: CONVERSAR COM O SENSEI IA                                      */}
+        {/* ========================================================================= */}
+        {activeView === 'chat' && (
+          <motion.div
+            key="view_chat"
+            initial={{ opacity: 0, y: 15, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -15, scale: 0.98 }}
+            className="bg-slate-900/90 backdrop-blur-2xl border border-white/15 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-400" />
+
             <div className="flex items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-2">
-                <span className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                <span className="p-2 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30">
                   <Bot className="w-5 h-5" />
                 </span>
                 <div>
                   <h3 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
-                    Sensei IA • Consultor Kaizen & 5S
+                    Tirar Dúvidas com o Sensei IA
                   </h3>
-                  <p className="text-xs text-cyan-300">
-                    Respostas sábias com áudio falado • Pergunte por voz ou texto
+                  <p className="text-xs text-purple-300">
+                    Respostas sábias com áudio falado • Pergunte por voz ou digite
                   </p>
                 </div>
               </div>
-
-              <button
-                onClick={() => {
-                  setActiveTab('idea');
-                  setIdeaPhase('input');
-                }}
-                className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
-                <span>Canal Kaizen</span>
-              </button>
             </div>
 
             {/* Quick Consultation Chips */}
@@ -832,7 +1154,7 @@ export function KaizenInteraction({
                       setChatInput(q);
                       handleAskSensei(q);
                     }}
-                    className="p-2.5 rounded-xl bg-slate-950/60 hover:bg-cyan-500/15 border border-white/10 hover:border-cyan-500/40 text-left text-xs text-slate-200 hover:text-cyan-300 transition cursor-pointer flex items-center justify-between"
+                    className="p-2.5 rounded-xl bg-slate-950/60 hover:bg-purple-500/15 border border-white/10 hover:border-purple-500/40 text-left text-xs text-slate-200 hover:text-purple-300 transition cursor-pointer flex items-center justify-between"
                   >
                     <span>{q}</span>
                     <ArrowRight className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
@@ -846,16 +1168,16 @@ export function KaizenInteraction({
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-slate-950/80 border border-cyan-500/40 rounded-2xl p-4 sm:p-5 mb-4 relative shadow-lg shadow-cyan-500/10"
+                className="bg-slate-950/80 border border-purple-500/40 rounded-2xl p-4 sm:p-5 mb-4 relative shadow-lg shadow-purple-500/10"
               >
-                <div className="flex items-center justify-between gap-2 mb-2 text-cyan-400 text-xs font-bold uppercase tracking-wider">
+                <div className="flex items-center justify-between gap-2 mb-2 text-purple-400 text-xs font-bold uppercase tracking-wider">
                   <span className="flex items-center gap-1.5">
-                    <Volume2 className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    <Volume2 className="w-4 h-4 text-purple-400 animate-pulse" />
                     O Sensei Responde:
                   </span>
                   <button
                     onClick={() => onSpeak(aiResponse)}
-                    className="text-[11px] text-cyan-400 hover:text-cyan-300 hover:underline cursor-pointer flex items-center gap-1"
+                    className="text-[11px] text-purple-400 hover:text-purple-300 hover:underline cursor-pointer flex items-center gap-1"
                   >
                     Repetir Voz 🔊
                   </button>
@@ -866,15 +1188,15 @@ export function KaizenInteraction({
               </motion.div>
             )}
 
-            {/* Input Bar: Voice Microphone + Text + Send */}
+            {/* Input Bar */}
             <div className="flex items-center gap-2 pt-1">
               <input
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAskSensei()}
-                placeholder="Pergunte ao Sensei... (ex: como evitar retrabalho na esteira?)"
-                className="flex-1 bg-slate-950/70 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+                placeholder="Pergunte ao Sensei... (ex: como evitar peças com defeito?)"
+                className="flex-1 bg-slate-950/70 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-purple-400 transition"
               />
 
               <button
@@ -883,9 +1205,9 @@ export function KaizenInteraction({
                 className={`p-3 rounded-2xl border transition cursor-pointer ${
                   isChatListening
                     ? 'bg-red-500/20 border-red-500 text-red-400 animate-pulse'
-                    : 'bg-slate-800/80 border-white/10 text-slate-300 hover:text-cyan-300 hover:border-cyan-500/40'
+                    : 'bg-slate-800/80 border-white/10 text-slate-300 hover:text-purple-300 hover:border-purple-500/40'
                 }`}
-                title={isChatListening ? "Ouvindo... Toque para parar" : "Falar pergunta no microfone"}
+                title={isChatListening ? "Ouvindo... Toque para parar" : "Falar no microfone"}
               >
                 {isChatListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
               </button>
@@ -894,12 +1216,12 @@ export function KaizenInteraction({
                 type="button"
                 onClick={() => handleAskSensei()}
                 disabled={isAiLoading || !chatInput.trim()}
-                className="px-5 py-3 rounded-2xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-slate-950 font-bold transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-cyan-500/25"
+                className="px-5 py-3 rounded-2xl bg-purple-500 hover:bg-purple-400 disabled:opacity-40 text-white font-bold transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-purple-500/25"
               >
                 {isAiLoading ? (
-                  <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                  <RefreshCw className="w-4 h-4 animate-spin text-white" />
                 ) : (
-                  <Send className="w-4 h-4 text-slate-950" />
+                  <Send className="w-4 h-4 text-white" />
                 )}
               </button>
             </div>
@@ -907,14 +1229,14 @@ export function KaizenInteraction({
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 3: BANCO DE IDEIAS (LISTA DE PROPOSTAS DO TOTEN)                       */}
+        {/* SUBVIEW 5: BANCO DE IDEIAS DO TOTEN                                       */}
         {/* ========================================================================= */}
-        {activeTab === 'list' && (
+        {activeView === 'lista_ideias' && (
           <motion.div
-            key="tab_list"
-            initial={{ opacity: 0, y: 12, scale: 0.99 }}
+            key="view_lista_ideias"
+            initial={{ opacity: 0, y: 15, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -12, scale: 0.99 }}
+            exit={{ opacity: 0, y: -15, scale: 0.98 }}
             className="bg-slate-900/90 backdrop-blur-2xl border border-white/15 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden"
           >
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-amber-400" />
@@ -936,7 +1258,7 @@ export function KaizenInteraction({
 
               <button
                 onClick={() => {
-                  setActiveTab('idea');
+                  setView('canal_kaizen');
                   setIdeaPhase('input');
                 }}
                 className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-500/20"
@@ -954,7 +1276,7 @@ export function KaizenInteraction({
                 </p>
                 <button
                   onClick={() => {
-                    setActiveTab('idea');
+                    setView('canal_kaizen');
                     setIdeaPhase('input');
                   }}
                   className="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition cursor-pointer"
