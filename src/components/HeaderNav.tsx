@@ -75,7 +75,7 @@ export const HeaderNav = React.memo(function HeaderNav({
               </span>
             </div>
             <p className="text-[11px] text-slate-400 hidden sm:block">
-              Toten Corporativo • Inteligência Artificial Gemini & 5S
+              Toten Corporativo • Sensei IA de Melhoria Contínua & 5S
             </p>
           </div>
         </div>

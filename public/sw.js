@@ -28,7 +28,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
-  // Pass-through for API calls (Gemini)
+  // Pass-through for API calls (Sensei AI)
   if (event.request.url.includes('/api/')) {
     return;
   }

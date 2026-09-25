@@ -1,65 +1,62 @@
-# Toten Sensei Kaizen 🥋🔭 (Powered by Google Gemini IA)
+# Toten Sensei Kaizen 🥋🔭 (Sensei IA de Chão de Fábrica)
 
-Sistema de Toten Interativo com **Visão Computacional em Tempo Real**, Inteligência Artificial Generativa **Google Gemini**, síntese de voz nativa, reconhecimento de fala por microfone e gamificação da cultura **Kaizen / 5S** para chão de fábrica e ambientes corporativos.
+Sistema de Toten Interativo com **Visão Computacional em Tempo Real**, Inteligência Artificial Generativa **Sensei IA**, síntese de voz nativa, reconhecimento de fala por microfone e gamificação da cultura **Kaizen / 5S** para chão de fábrica e ambientes corporativos.
+
+⚡ **Feito por Mauricio Grigol**
 
 Inspirado na identidade visual tecnológica em **Dark Slate & Glassmorphism** do projeto [`big-bag-calculator`](https://github.com/Mauthope/big-bag-calculator).
 
 ---
 
-## ✨ Novidades da Versão 1.1
+## ✨ Novidades da Versão 1.3
 
-1. **Inteligência Artificial Google Gemini (`gemini-1.5-flash`)**:
-   * O Sensei agora responde a qualquer pergunta técnica sobre Lean Manufacturing, 5S, eliminação de desperdícios (Muda) ou rotina da fábrica.
-   * **Respostas Faladas**: O Sensei sintetiza a resposta da IA em voz alta em português brasileiro.
-   * **Reconhecimento de Voz (Microfone)**: O usuário pode falar a pergunta diretamente para o toten ou digitar na tela.
-2. **Seleção e Troca de Câmeras (Frontal vs. Traseira)**:
-   * Botão de alternância rápida entre Câmera Frontal (Selfie) e Câmera Traseira (Ambiente).
-   * Suporte a seleção de webcams USB externas via menu dropdown de dispositivos.
-   * Resolução do fluxo de captura com montagem persistente do elemento de vídeo.
+1. **Canal Kaizen com Entrada por Voz & Estruturação Automática**:
+   * O colaborador grava a ideia no microfone do toten ou digita livremente.
+   * O **Sensei IA** interpreta a fala, elimina vícios de áudio ou ruídos e estrutura automaticamente a proposta: Título, Categoria, Problema, Solução Prática e Benefícios Esperados.
+   * Confirmação em 1 clique com geração instantânea de número de protocolo (`KZ-2026-XXXX`), chuva de confetes e incentivo em voz alta.
+2. **Consultoria Direta com Sensei IA**:
+   * O Sensei responde imediatamente a qualquer dúvida sobre 5S, Poka-Yoke, eliminação de desperdícios (Muda) e segurança do trabalho.
+   * Respostas sintetizadas em voz alta em português brasileiro com cards de balão de fala limpos.
+3. **Quadro de Interação Clean & Direto ao Ponto**:
+   * Interface despoluída com foco direto nos dois grandes pilares: **💡 Canal Kaizen (Cadastrar Ideia)** e **🥋 Falar com Sensei IA**.
+   * Transição fluida de sprites pixel art 32-bit sincronizados com o estado (buscando, comemorando, falando, eureka/ideia e sucesso).
+4. **Resiliência e Fallback Inteligente**:
+   * Motor de conhecimento local para que o Sensei responda com maestria mesmo sem conexão de rede externa.
 
 ---
 
 ## 🚀 Principais Funcionalidades
 
 ### 1. Visão Computacional & Presença (TensorFlow.js + COCO-SSD)
-* **Detecção em Tempo Real**: Rastreia a presença de pessoas na frente do toten utilizando IA via câmera WebRTC.
-* **Otimizado para Baixo Consumo**: Amostragem controlada de frames (~5,5 inferências/segundo) para manter a GPU e CPU frias mesmo em operação contínua 24/7.
-* **Filtro de Inatividade (Debounce)**: Tolerância de 3,8 segundos para movimentos naturais de cabeça.
-* **Simulador Integrado**: Painel de diagnóstico com botões para simular presença/ausência de pessoas caso esteja testando em computador sem webcam.
+* **Detecção em Tempo Real**: Rastreia a presença de pessoas na frente do toten utilizando IA via câmera WebRTC com aceleração WebGL.
+* **Otimizado para Baixo Consumo**: Inferência ultra-rápida em canvas offscreen (320x240) para manter CPU e GPU frias em operação contínua 24/7.
+* **Filtro de Inatividade Inteligente**: Mantém a sessão aberta enquanto o usuário estiver interagindo ou lendo na tela.
 
 ### 2. O Personagem "Sensei"
 * **Modo Descanso (Idle / Screensaver)**:
-  * O Sensei segura um binóculo tecnológico nos olhos e faz varredura animada da área (esquerda, centro, direita).
-  * Frases dinâmicas convidando as pessoas a se aproximarem (*"Cadê todo mundo? O Sensei está procurando talentos Kaizen..."*).
-  * Radar e sonar cibernético pulsando ao fundo.
+  * O Sensei segura um binóculo tecnológico nos olhos e faz varredura animada da área.
+  * Sonar cibernético e visor de câmera aberto na metade inferior com guias sci-fi.
 * **Modo Ativo (Pessoa Detectada)**:
-  * O Sensei abaixa o binóculo, abre um sorriso e acena alegremente!
-  * **Síntese de Voz (TTS)**: Fala em português brasileiro natural: *"Olá! Estou te vendo! Você sabe o que é Kaizen?"*.
-  * Abre o painel interativo touchscreen.
+  * O Sensei comemora a aproximação com confetes e saudações enérgicas em voz alta.
+  * Transição instantânea para o painel de interação touch.
 
-### 3. Pílulas e Gamificação Kaizen
-* **Bate-Papo com Gemini IA**: Tire dúvidas sobre 5S, segurança e melhoria contínua por voz ou texto.
-* **Pergunta Inicial**: Avaliação rápida de conhecimento.
-* **Pílulas Interativas**: *O que é Kaizen*, *Os 5S*, *Os 8 Desperdícios*, *Gemba*, *Poka-Yoke*.
-* **Desafio 5S do Turno**: Missão prática de 2 minutos para aplicar no setor.
-* **Banco de Ideias**: Envio de sugestões de melhoria com chuva de confetes.
+### 3. Canal Kaizen & Banco de Ideias
+* **Cadastro por Voz**: Fale a ideia naturalmente no microfone.
+* **Estruturação por IA**: Classificação automática em categorias (5S, Segurança, Manutenção Autônoma, Desperdício, Qualidade, Produtividade).
+* **Protocolo e Histórico**: Consulta de ideias anteriores enviadas no turno.
 
 ---
 
-## 🔑 Configuração da Variável Gemini na Vercel
+## 🔑 Configuração de API (Opcional)
 
-Para que o Sensei utilize o cérebro da Google Gemini IA:
+Para que o Sensei IA utilize modelos em nuvem adicionais:
 
-1. Obtenha uma chave gratuita da API no [Google AI Studio](https://aistudio.google.com/app/apikey).
-2. No painel da **Vercel** do seu projeto:
-   * Vá em **Settings** > **Environment Variables**.
-   * Adicione a chave:
-     * **Key**: `GEMINI_API_KEY`
-     * **Value**: *sua_chave_gerada_aqui*
-   * Marque os ambientes **Production**, **Preview** e **Development**.
-   * Salve e faça um redeploy.
+1. Obtenha uma chave no [Google AI Studio](https://aistudio.google.com/app/apikey).
+2. Na **Vercel** ou em `.env.local`:
+   * Adicione: `GEMINI_API_KEY=sua_chave_aqui`
+3. Salve e faça o deploy.
 
-*(Nota: Caso a variável não esteja preenchida, o sistema entra automaticamente em modo de contingência inteligente com respostas Kaizen pré-carregadas).*
+*(Nota: O sistema possui cérebro local próprio e responde com sabedoria Kaizen mesmo se a chave não estiver configurada).*
 
 ---
 
@@ -68,7 +65,6 @@ Para que o Sensei utilize o cérebro da Google Gemini IA:
 * **100% On-Device (Client-Side)**: O vídeo da câmera é processado estritamente na memória RAM do navegador.
 * **Nenhuma Imagem Gravada**: Não há upload para servidores, nuvem ou armazenamento em disco.
 * **Sem Biometria**: O modelo apenas detecta a classe genérica de silhueta `person`, sem reconhecimento facial ou identificação de quem é o colaborador.
-* **Licenciamento 100% Open-Source**: Baseado em bibliotecas sob licença **Apache 2.0** e **MIT**.
 
 ---
 

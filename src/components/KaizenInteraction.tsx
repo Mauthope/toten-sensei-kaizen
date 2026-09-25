@@ -3,32 +3,25 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { DYNAMIC_HOOKS, KAIZEN_PILLS, DynamicHook, DynamicHookOption } from '../lib/kaizenData';
 import { SenseiState, CanalKaizenIdea } from '../types';
 import { 
-  Sparkles, 
-  CheckCircle2, 
-  BookOpen, 
   Lightbulb, 
-  RefreshCw, 
-  Trophy, 
-  ArrowRight, 
-  Bot, 
+  Sparkles, 
   Send, 
   Mic, 
   MicOff, 
-  Flame, 
-  Compass, 
   X, 
-  Wand2, 
   ListFilter, 
   Clock, 
   User, 
   Building2, 
-  Check, 
-  ChevronRight,
-  HelpCircle,
-  FileCheck
+  FileCheck,
+  CheckCircle2,
+  RefreshCw,
+  MessageSquare,
+  Bot,
+  Volume2,
+  ArrowRight
 } from 'lucide-react';
 
 interface KaizenInteractionProps {
@@ -44,40 +37,18 @@ export function KaizenInteraction({
   onStateChange, 
   onReturnToIdle 
 }: KaizenInteractionProps) {
-  // Navigation steps:
-  // 'hook': Dynamic attention-grabber question (relatable workplace problem)
-  // 'intro': Sensei introduces Kaizen/5S connecting to the user's specific answer
-  // 'canal_kaizen': Idea registration with Voice + Gemini AI refinement
-  // 'canal_kaizen_list': View previously registered ideas
-  // 'pill': Detailed Kaizen & 5S Pills
-  // 'challenge': 2-minute 5S Turn Challenge
-  // 'gemini': Conversational AI with Google Gemini
-  const [step, setStep] = useState<
-    'hook' | 'intro' | 'canal_kaizen' | 'canal_kaizen_list' | 'pill' | 'challenge' | 'gemini'
-  >('hook');
-
-  // Currently active dynamic hook
-  const [currentHook, setCurrentHook] = useState<DynamicHook>(DYNAMIC_HOOKS[0]);
-  const [selectedOption, setSelectedOption] = useState<DynamicHookOption | null>(null);
-  const [selectedPillIndex, setSelectedPillIndex] = useState(0);
-
-  // Gemini AI Chat states
-  const [chatInput, setChatInput] = useState('');
-  const [aiResponse, setAiResponse] = useState<string | null>(null);
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [chatListening, setChatListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
+  // Navigation tabs: 'idea' (Canal Kaizen), 'chat' (Sensei IA), 'list' (Ideias Cadastradas)
+  const [activeTab, setActiveTab] = useState<'idea' | 'chat' | 'list'>('idea');
 
   // ==========================================
   // CANAL KAIZEN (IDEAS) STATES
   // ==========================================
-  const [rawIdeaVoice, setRawIdeaVoice] = useState('');
-  const [isVoiceRecordingIdea, setIsVoiceRecordingIdea] = useState(false);
-  const [isRefiningWithAi, setIsRefiningWithAi] = useState(false);
   const [ideaPhase, setIdeaPhase] = useState<'input' | 'review' | 'success'>('input');
-  
-  // Refined Idea Form fields (editable by user)
+  const [rawIdeaInput, setRawIdeaInput] = useState('');
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const [isStructuring, setIsStructuring] = useState(false);
+
+  // Form fields for review & confirmation
   const [ideaTitle, setIdeaTitle] = useState('');
   const [ideaCategory, setIdeaCategory] = useState('5S & Organização');
   const [ideaProblem, setIdeaProblem] = useState('');
@@ -88,7 +59,18 @@ export function KaizenInteraction({
   const [lastSubmittedIdea, setLastSubmittedIdea] = useState<CanalKaizenIdea | null>(null);
   const [registeredIdeas, setRegisteredIdeas] = useState<CanalKaizenIdea[]>([]);
 
-  // Callbacks stored in refs to avoid re-triggering effects on parent re-renders
+  // ==========================================
+  // SENSEI IA CHAT STATES
+  // ==========================================
+  const [chatInput, setChatInput] = useState('');
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [isChatListening, setIsChatListening] = useState(false);
+
+  // Recognition reference
+  const recognitionRef = useRef<any>(null);
+
+  // Refs for callbacks to prevent unnecessary effect triggers
   const onReturnToIdleRef = useRef(onReturnToIdle);
   onReturnToIdleRef.current = onReturnToIdle;
 
@@ -100,7 +82,7 @@ export function KaizenInteraction({
 
   const hasCelebratedRef = useRef(false);
 
-  // Load existing ideas from localStorage on mount
+  // Load existing ideas from localStorage
   useEffect(() => {
     try {
       const stored = localStorage.getItem('toten_canal_kaizen_ideas');
@@ -108,16 +90,16 @@ export function KaizenInteraction({
         setRegisteredIdeas(JSON.parse(stored));
       }
     } catch (e) {
-      console.warn("Could not load ideas from localStorage:", e);
+      console.warn("Failed loading ideas from localStorage:", e);
     }
   }, []);
 
-  // Party celebration & dynamic greeting on detection - RUNS STRICTLY ONCE ON MOUNT
+  // Celebration burst and initial greeting when user arrives (Strictly once per detection session)
   useEffect(() => {
     if (hasCelebratedRef.current) return;
     hasCelebratedRef.current = true;
 
-    // 1. Party celebration bursts (confetti!)
+    // 1. Confetti explosion
     confetti({
       particleCount: 80,
       spread: 75,
@@ -125,7 +107,7 @@ export function KaizenInteraction({
     });
     setTimeout(() => {
       confetti({
-        particleCount: 50,
+        particleCount: 45,
         spread: 90,
         origin: { y: 0.5 }
       });
@@ -133,132 +115,57 @@ export function KaizenInteraction({
 
     onStateChangeRef.current('celebrating');
 
-    // 2. Energetic Party greetings
-    const partyGreetings = [
-      "Ei você aí! Sabe o que é Kaizen?",
-      "Vem aqui, posso te ensinar!",
-      "Tem alguma dúvida sobre melhoria contínua?",
-      "Aha, te vi! O Sensei preparou uma novidade pro seu turno!",
-      "Parado aí, campeão! Chega mais perto da tela!"
+    // 2. Energetic welcome phrases
+    const greetings = [
+      "Ei você aí! Sabe o que é Kaizen? Vem aqui que posso te ensinar!",
+      "Aha, te vi! O Sensei preparou novidades para o seu turno de hoje!",
+      "Vem aqui, campeão! Tem alguma ideia ou dúvida sobre melhoria contínua?",
+      "Parado aí! O Sensei está a postos para receber sua sugestão de melhoria!"
     ];
-    const randomParty = partyGreetings[Math.floor(Math.random() * partyGreetings.length)];
+    const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
 
-    const randomIdx = Math.floor(Math.random() * DYNAMIC_HOOKS.length);
-    const chosenHook = DYNAMIC_HOOKS[randomIdx];
-    setCurrentHook(chosenHook);
-    setStep('hook');
-    setSelectedOption(null);
-
-    // Speak dynamic celebration phrase + question once
-    onSpeakRef.current(`${randomParty} ${chosenHook.calloutSpeech}`);
+    onSpeakRef.current(`${randomGreeting} Cadastre sua ideia no Canal Kaizen ou converse com o Sensei!`);
 
     setTimeout(() => {
-      onStateChangeRef.current('interacting');
-    }, 1800);
+      onStateChangeRef.current('idea');
+    }, 2000);
   }, []);
 
-  // Dynamically synchronize mascot sprite with active interaction context
+  // Synchronize Mascot sprite with the active view
   useEffect(() => {
     if (!hasCelebratedRef.current) return;
 
-    if (step === 'canal_kaizen') {
+    if (activeTab === 'idea') {
       if (ideaPhase === 'success') {
         onStateChangeRef.current('success');
       } else {
         onStateChangeRef.current('idea');
       }
-    } else if (step === 'hook' || step === 'intro' || step === 'gemini' || step === 'pill') {
+    } else if (activeTab === 'chat') {
+      onStateChangeRef.current('interacting');
+    } else {
       onStateChangeRef.current('interacting');
     }
-  }, [step, ideaPhase]);
+  }, [activeTab, ideaPhase]);
 
-  // Web Speech Recognition for Chat & Canal Kaizen Voice
-  const startSpeechForChat = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Reconhecimento de voz não suportado neste navegador. Digite no campo abaixo!");
-      return;
-    }
-
-    if (chatListening) {
-      recognitionRef.current?.stop();
-      setChatListening(false);
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'pt-BR';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setChatInput(transcript);
-      setChatListening(false);
-      handleAskGemini(transcript);
+  // Clean up any active speech recognition on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (_) {}
+      }
     };
+  }, []);
 
-    recognition.onerror = () => setChatListening(false);
-    recognition.onend = () => setChatListening(false);
-    recognitionRef.current = recognition;
+  // ==========================================
+  // AUTOMATIC IDEA STRUCTURING
+  // ==========================================
+  const structureIdeaProposal = async (text: string) => {
+    if (!text.trim()) return;
 
-    try {
-      setChatListening(true);
-      recognition.start();
-    } catch (err) {
-      setChatListening(false);
-    }
-  }, [chatListening]);
-
-  // Voice recording specifically for CANAL KAIZEN idea capture
-  const toggleVoiceRecordingForIdea = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("Reconhecimento de voz não suportado neste navegador. Você pode digitar sua ideia!");
-      return;
-    }
-
-    if (isVoiceRecordingIdea) {
-      recognitionRef.current?.stop();
-      setIsVoiceRecordingIdea(false);
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'pt-BR';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setRawIdeaVoice(transcript);
-      setIsVoiceRecordingIdea(false);
-      // Automatically trigger AI refinement of voice!
-      refineIdeaWithGemini(transcript);
-    };
-
-    recognition.onerror = (e: any) => {
-      console.warn("Speech recognition error:", e);
-      setIsVoiceRecordingIdea(false);
-    };
-    recognition.onend = () => setIsVoiceRecordingIdea(false);
-    recognitionRef.current = recognition;
-
-    try {
-      setIsVoiceRecordingIdea(true);
-      recognition.start();
-    } catch (err) {
-      setIsVoiceRecordingIdea(false);
-    }
-  }, [isVoiceRecordingIdea]);
-
-  // Refine Idea with Gemini AI (Interprets broken/colloquial voice and structures proposal)
-  const refineIdeaWithGemini = async (textToRefine: string) => {
-    if (!textToRefine.trim()) return;
-
-    setIsRefiningWithAi(true);
+    setIsStructuring(true);
     onStateChange('interacting');
 
     try {
@@ -267,7 +174,7 @@ export function KaizenInteraction({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'refine_idea',
-          rawText: textToRefine
+          rawText: text
         })
       });
 
@@ -276,38 +183,83 @@ export function KaizenInteraction({
         const d = json.data;
         setIdeaTitle(d.title || 'Melhoria no Posto de Trabalho');
         setIdeaCategory(d.category || '5S & Organização');
-        setIdeaProblem(d.problem || textToRefine);
-        setIdeaSolution(d.solution || 'Ajuste de procedimento ou instalação de dispositivo.');
-        setIdeaBenefits(d.benefits || 'Maior agilidade, segurança e qualidade no turno.');
-        
+        setIdeaProblem(d.problem || text);
+        setIdeaSolution(d.solution || 'Padronizar e ajustar conforme necessidade do posto.');
+        setIdeaBenefits(d.benefits || 'Mais agilidade, ergonomia e segurança no turno.');
         setIdeaPhase('review');
 
         if (d.senseiEncouragement) {
           onSpeak(d.senseiEncouragement);
         } else {
-          onSpeak("Ideia interpretada com sucesso! Dê uma olhada na proposta estruturada e confirme o envio.");
+          onSpeak("Ideia interpretada com sucesso! Dê uma olhada na proposta e confirme o envio.");
         }
       } else {
         // Fallback structuring
-        setIdeaTitle(`Melhoria Kaizen: ${textToRefine.slice(0, 35)}...`);
-        setIdeaProblem(textToRefine);
-        setIdeaSolution("Padronizar e ajustar conforme necessidade do posto.");
-        setIdeaBenefits("Mais segurança e agilidade no turno.");
+        setIdeaTitle(`Melhoria Kaizen: ${text.slice(0, 36)}...`);
+        setIdeaProblem(text);
+        setIdeaSolution("Implementar dispositivo ou rotina padrão.");
+        setIdeaBenefits("Mais segurança e agilidade no posto.");
         setIdeaPhase('review');
+        onSpeak("Ideia organizada! Você pode revisar e confirmar o envio.");
       }
     } catch (err) {
-      console.warn("Erro ao refinar ideia:", err);
-      setIdeaTitle(`Melhoria: ${textToRefine.slice(0, 30)}...`);
-      setIdeaProblem(textToRefine);
-      setIdeaSolution("Implementar melhoria sugerida pelo operador.");
-      setIdeaBenefits("Otimização de processo.");
+      console.warn("Erro ao estruturar proposta:", err);
+      setIdeaTitle(`Melhoria: ${text.slice(0, 30)}...`);
+      setIdeaProblem(text);
+      setIdeaSolution("Implementar sugestão prática do operador.");
+      setIdeaBenefits("Otimização do posto.");
       setIdeaPhase('review');
     } finally {
-      setIsRefiningWithAi(false);
+      setIsStructuring(false);
     }
   };
 
-  // Submit Finalized Kaizen Idea
+  // Toggle Voice Recording for Canal Kaizen Idea
+  const toggleVoiceRecordingForIdea = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) {
+      alert("Reconhecimento de voz não suportado neste navegador. Digite sua ideia no campo de texto!");
+      return;
+    }
+
+    if (isVoiceRecording) {
+      try {
+        recognitionRef.current?.stop();
+      } catch (_) {}
+      setIsVoiceRecording(false);
+      return;
+    }
+
+    const recognition = new SpeechRec();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setRawIdeaInput(transcript);
+      setIsVoiceRecording(false);
+      // Automatically triggers proposal structuring without extra clicks!
+      structureIdeaProposal(transcript);
+    };
+
+    recognition.onerror = (e: any) => {
+      console.warn("Speech error:", e);
+      setIsVoiceRecording(false);
+    };
+    recognition.onend = () => setIsVoiceRecording(false);
+    recognitionRef.current = recognition;
+
+    try {
+      setIsVoiceRecording(true);
+      recognition.start();
+    } catch (err) {
+      setIsVoiceRecording(false);
+    }
+  }, [isVoiceRecording]);
+
+  // Submit Finalized Idea
   const handleConfirmIdeaSubmission = (e: React.FormEvent) => {
     e.preventDefault();
     if (!ideaTitle.trim() || !ideaProblem.trim()) return;
@@ -323,9 +275,9 @@ export function KaizenInteraction({
       problem: ideaProblem,
       solution: ideaSolution,
       benefits: ideaBenefits,
-      rawVoiceInput: rawIdeaVoice || undefined,
-      authorName: ideaAuthor || 'Colaborador Anônimo',
-      department: ideaDepartment || 'Chão de Fábrica',
+      rawVoiceInput: rawIdeaInput || undefined,
+      authorName: ideaAuthor.trim() || 'Colaborador do Turno',
+      department: ideaDepartment.trim() || 'Chão de Fábrica',
       createdAt: new Date().toLocaleString('pt-BR'),
       status: 'Em Análise',
       senseiEncouragement: "Excelente contribuição para a melhoria contínua da empresa!"
@@ -336,23 +288,25 @@ export function KaizenInteraction({
     try {
       localStorage.setItem('toten_canal_kaizen_ideas', JSON.stringify(updated));
     } catch (e) {
-      console.warn("Failed saving to localStorage:", e);
+      console.warn("Error saving to localStorage:", e);
     }
 
     setLastSubmittedIdea(newIdea);
     setIdeaPhase('success');
 
     confetti({
-      particleCount: 110,
+      particleCount: 120,
       spread: 85,
       origin: { y: 0.55 }
     });
 
-    onSpeak(`Parabéns! Sua ideia foi cadastrada no Canal Kaizen com o protocolo ${newProtocol}! Obrigado por construir uma fábrica melhor!`);
+    onSpeak(`Parabéns! Sua ideia foi cadastrada no Canal Kaizen sob o protocolo ${newProtocol}! Obrigado por construir uma fábrica melhor!`);
   };
 
-  // Ask Gemini Chat Question
-  const handleAskGemini = async (questionText?: string) => {
+  // ==========================================
+  // SENSEI IA CHAT / CONSULTATION
+  // ==========================================
+  const handleAskSensei = async (questionText?: string) => {
     const textToSend = questionText || chatInput;
     if (!textToSend.trim() || isAiLoading) return;
 
@@ -376,13 +330,13 @@ export function KaizenInteraction({
       onSpeak(reply);
 
       confetti({
-        particleCount: 40,
+        particleCount: 35,
         spread: 60,
         origin: { y: 0.6 }
       });
     } catch (err) {
-      console.error("Erro ao chamar API Gemini:", err);
-      const fallbackMsg = "O Sensei teve uma oscilação na rede, mas lembre-se: disciplina e 5S vencem qualquer obstáculo!";
+      console.warn("Erro ao consultar Sensei:", err);
+      const fallbackMsg = "O Sensei lembra: disciplina e 5S vencem qualquer obstáculo! Qual a sua dúvida sobre o posto?";
       setAiResponse(fallbackMsg);
       onSpeak(fallbackMsg);
     } finally {
@@ -390,416 +344,222 @@ export function KaizenInteraction({
     }
   };
 
-  // User answered the dynamic hook question -> Introduce Kaizen now!
-  const handleSelectHookOption = (option: DynamicHookOption) => {
-    setSelectedOption(option);
-    onSpeak(option.reactionSpeech);
-
-    confetti({
-      particleCount: 60,
-      spread: 70,
-      origin: { y: 0.6 }
-    });
-
-    onStateChange('interacting');
-    setStep('intro');
-  };
-
-  const handleOpenRecommendedPill = () => {
-    if (selectedOption?.recommendedPillId) {
-      const pIdx = KAIZEN_PILLS.findIndex(p => p.id === selectedOption.recommendedPillId);
-      if (pIdx !== -1) {
-        setSelectedPillIndex(pIdx);
-      }
+  // Voice recording for Sensei IA Chat
+  const toggleSpeechForChat = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) {
+      alert("Reconhecimento de voz não suportado neste navegador. Digite no campo abaixo!");
+      return;
     }
-    setStep('pill');
-  };
 
-  const handleNextPill = () => {
-    const nextIdx = (selectedPillIndex + 1) % KAIZEN_PILLS.length;
-    setSelectedPillIndex(nextIdx);
-    onSpeak(`${KAIZEN_PILLS[nextIdx].title}. ${KAIZEN_PILLS[nextIdx].content}`);
-  };
+    if (isChatListening) {
+      try {
+        recognitionRef.current?.stop();
+      } catch (_) {}
+      setIsChatListening(false);
+      return;
+    }
+
+    const recognition = new SpeechRec();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setChatInput(transcript);
+      setIsChatListening(false);
+      handleAskSensei(transcript);
+    };
+
+    recognition.onerror = () => setIsChatListening(false);
+    recognition.onend = () => setIsChatListening(false);
+    recognitionRef.current = recognition;
+
+    try {
+      setIsChatListening(true);
+      recognition.start();
+    } catch (err) {
+      setIsChatListening(false);
+    }
+  }, [isChatListening]);
 
   return (
     <div className="w-full max-w-4xl mx-auto px-2 sm:px-4 z-20">
       
-      {/* Top Session Bar: Live Presence Indicator & Quick Conclude Button */}
-      <div className="flex items-center justify-between gap-2 mb-3 bg-slate-900/80 backdrop-blur-md border border-white/10 px-4 py-2 rounded-2xl shadow-lg">
-        {/* Left: Presence Indicator */}
+      {/* Top Bar: Clean Status + Direct Segmented Navigation + Conclude */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3 bg-slate-900/90 backdrop-blur-xl border border-white/10 px-3 sm:px-4 py-2 rounded-2xl shadow-xl">
+        {/* Presence indicator */}
         <div className="flex items-center gap-2">
           <span className={`w-2.5 h-2.5 rounded-full ${personDetected ? 'bg-emerald-400 shadow-[0_0_10px_#34d399] animate-pulse' : 'bg-amber-400'}`} />
           <span className="text-xs font-semibold text-slate-300">
-            {personDetected ? 'Operador Presente • Sessão Ativa' : 'Aguardando Operador...'}
+            {personDetected ? 'Operador Presente' : 'Aguardando Operador...'}
           </span>
         </div>
 
-        {/* Center: Navigation shortcuts */}
-        <div className="hidden sm:flex items-center gap-1.5 text-xs">
-          <button
-            onClick={() => setStep('hook')}
-            className={`px-3 py-1 rounded-lg transition font-medium cursor-pointer ${
-              step === 'hook' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            🎯 Início
-          </button>
-          
+        {/* Center: Clean 3-Tab Segmented Switcher */}
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-950/70 border border-white/10 text-xs">
+          {/* TAB 1: CANAL KAIZEN (HERO HIGHLIGHT) */}
           <button
             onClick={() => {
-              setStep('canal_kaizen');
+              setActiveTab('idea');
               setIdeaPhase('input');
             }}
-            className={`px-3 py-1 rounded-lg transition font-bold cursor-pointer flex items-center gap-1.5 ${
-              step === 'canal_kaizen' || step === 'canal_kaizen_list'
-                ? 'bg-gradient-to-r from-amber-500/30 to-purple-500/30 text-amber-300 border border-amber-400/50 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
-                : 'text-amber-400 hover:text-amber-300 bg-amber-500/10 border border-amber-500/20'
+            className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'idea'
+                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.4)]'
+                : 'text-amber-400 hover:text-amber-300 hover:bg-white/5'
             }`}
           >
-            <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
-            Canal Kaizen
+            <Lightbulb className="w-4 h-4 shrink-0" />
+            <span>Cadastrar Ideia</span>
           </button>
 
+          {/* TAB 2: SENSEI IA CHAT */}
           <button
-            onClick={() => setStep('gemini')}
-            className={`px-3 py-1 rounded-lg transition font-medium cursor-pointer flex items-center gap-1.5 ${
-              step === 'gemini' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'text-slate-400 hover:text-white'
+            onClick={() => setActiveTab('chat')}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'chat'
+                ? 'bg-cyan-500 text-slate-950 font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)]'
+                : 'text-cyan-300 hover:text-white hover:bg-white/5'
             }`}
           >
-            <Bot className="w-3.5 h-3.5" />
-            Sensei IA
+            <Bot className="w-4 h-4 shrink-0" />
+            <span>Falar com Sensei IA</span>
           </button>
 
+          {/* TAB 3: REGISTERED IDEAS LIST */}
           <button
-            onClick={() => setStep('challenge')}
-            className={`px-3 py-1 rounded-lg transition font-medium cursor-pointer flex items-center gap-1.5 ${
-              step === 'challenge' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'text-slate-400 hover:text-white'
+            onClick={() => setActiveTab('list')}
+            className={`px-2.5 py-1.5 rounded-lg font-medium transition flex items-center gap-1 cursor-pointer ${
+              activeTab === 'list'
+                ? 'bg-slate-800 text-white font-bold border border-white/15'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
             }`}
           >
-            <Trophy className="w-3.5 h-3.5" />
-            Desafio 5S
+            <ListFilter className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Ideias</span> ({registeredIdeas.length})
           </button>
         </div>
 
-        {/* Right: Conclude session button (No rush! User decides or walks away) */}
+        {/* Right: Quick Conclude Session */}
         <button
           onClick={onReturnToIdle}
-          className="px-3 py-1 rounded-lg bg-slate-800/80 hover:bg-red-500/20 border border-white/10 hover:border-red-500/40 text-xs font-semibold text-slate-300 hover:text-red-300 transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-          title="Encerrar sessão e voltar ao modo de descanso"
+          className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-red-500/20 border border-white/10 hover:border-red-500/40 text-xs font-semibold text-slate-300 hover:text-red-300 transition flex items-center gap-1 cursor-pointer"
+          title="Encerrar sessão interativa"
         >
-          <X className="w-3.5 h-3.5 text-slate-400" />
-          <span>Concluir</span>
+          <X className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Encerrar</span>
         </button>
       </div>
 
       <AnimatePresence mode="wait">
         
-        {/* STEP 1: DYNAMIC HOOK (Attention Grabber & Relatable Icebreaker) */}
-        {step === 'hook' && (
+        {/* ========================================================================= */}
+        {/* TAB 1: CANAL KAIZEN (CADASTRAR IDEIA) - CLEAN, DIRECT & ACCESSIBLE        */}
+        {/* ========================================================================= */}
+        {activeTab === 'idea' && (
           <motion.div
-            key="hook"
-            initial={{ opacity: 0, y: 15, scale: 0.98 }}
+            key="tab_idea"
+            initial={{ opacity: 0, y: 12, scale: 0.99 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -15, scale: 0.98 }}
-            className="bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
+            exit={{ opacity: 0, y: -12, scale: 0.99 }}
+            className="bg-slate-900/90 backdrop-blur-2xl border border-white/15 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden"
           >
-            {/* Top Cyan Glowing Line */}
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-cyan-500" />
+            {/* Top Glowing Amber Line */}
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500" />
 
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
-                <Flame className="w-3.5 h-3.5 text-cyan-400" />
-                {currentHook.badge}
-              </span>
-
-              {/* Direct Canal Kaizen Action Button */}
-              <button
-                onClick={() => {
-                  setStep('canal_kaizen');
-                  setIdeaPhase('input');
-                }}
-                className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-gradient-to-r from-amber-500/20 to-purple-500/20 text-amber-300 border border-amber-400/40 hover:border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)] transition cursor-pointer flex items-center gap-1.5"
-              >
-                <Lightbulb className="w-4 h-4 text-amber-400 animate-pulse" />
-                💡 Cadastrar Ideia no Canal Kaizen
-              </button>
-            </div>
-
-            <h2 className="text-xl sm:text-2xl font-bold text-white mb-2 tracking-tight">
-              {currentHook.question}
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-300 mb-5">
-              Toque na opção que mais combina com a sua realidade no posto de trabalho:
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-5">
-              {currentHook.options.map((option, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleSelectHookOption(option)}
-                  className="flex items-center justify-start text-left p-4 rounded-2xl bg-slate-800/80 hover:bg-cyan-500/15 border border-white/10 hover:border-cyan-500/50 text-white font-medium transition-all duration-200 group active:scale-98 cursor-pointer shadow-md hover:shadow-cyan-500/15"
-                >
-                  <span className="text-sm sm:text-base text-slate-200 group-hover:text-cyan-300 leading-snug">
-                    {option.text}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {/* Bottom Actions Bar */}
-            <div className="pt-4 border-t border-white/10 flex flex-wrap justify-between items-center gap-3 text-xs text-slate-400">
-              <span className="flex items-center gap-1.5 text-slate-300">
-                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                O Sensei aprende e interage em tempo real com seu turno
-              </span>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    const nextHookIdx = (DYNAMIC_HOOKS.findIndex(h => h.id === currentHook.id) + 1) % DYNAMIC_HOOKS.length;
-                    setCurrentHook(DYNAMIC_HOOKS[nextHookIdx]);
-                    onSpeak(DYNAMIC_HOOKS[nextHookIdx].calloutSpeech);
-                  }}
-                  className="text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1 cursor-pointer font-medium"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Outra Pergunta
-                </button>
-
-                <button
-                  onClick={() => setStep('gemini')}
-                  className="px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition cursor-pointer flex items-center gap-1 font-medium"
-                >
-                  <Bot className="w-3.5 h-3.5" /> Perguntar à IA
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* STEP 2: METHODOLOGY INTRODUCTION */}
-        {step === 'intro' && selectedOption && (
-          <motion.div
-            key="intro"
-            initial={{ opacity: 0, y: 15, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -15, scale: 0.98 }}
-            className="bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
-          >
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-cyan-500 to-amber-500" />
-
-            <div className="flex items-center justify-between gap-4 mb-3">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                <Sparkles className="w-3.5 h-3.5" />
-                A Solução Kaizen & 5S
-              </span>
-              <span className="text-xs text-slate-400">Filosofia de Produção</span>
-            </div>
-
-            {/* Sensei's Reaction Speech */}
-            <div className="bg-cyan-500/10 border border-cyan-500/25 rounded-2xl p-4 mb-4">
-              <p className="text-sm sm:text-base font-medium text-cyan-200 italic">
-                &ldquo;{selectedOption.reactionSpeech}&rdquo;
-              </p>
-            </div>
-
-            {/* Structured Methodology Explanation */}
-            <div className="bg-slate-950/60 border border-white/5 rounded-2xl p-4 sm:p-5 mb-5 text-slate-200 text-xs sm:text-sm leading-relaxed">
-              <h4 className="text-sm sm:text-base font-bold text-white mb-2 flex items-center gap-2">
-                <Compass className="w-4 h-4 text-cyan-400" />
-                Como a metodologia resolve isso na prática:
-              </h4>
-              <p className="text-slate-300">
-                {selectedOption.methodologyIntro}
-              </p>
-            </div>
-
-            {/* Next Action Choices */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-              <button
-                onClick={() => {
-                  setStep('canal_kaizen');
-                  setIdeaPhase('input');
-                }}
-                className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-500/20 to-purple-500/20 hover:from-amber-500/30 hover:to-purple-500/30 border border-amber-400/40 text-amber-300 text-xs sm:text-sm font-bold transition cursor-pointer flex flex-col items-center justify-center text-center gap-1.5 shadow-md shadow-amber-500/10"
-              >
-                <Lightbulb className="w-5 h-5 text-amber-400" />
-                <span>💡 Canal Kaizen (Cadastrar Ideia)</span>
-              </button>
-
-              <button
-                onClick={handleOpenRecommendedPill}
-                className="p-3.5 rounded-2xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-xs sm:text-sm font-semibold transition cursor-pointer flex flex-col items-center justify-center text-center gap-1.5"
-              >
-                <BookOpen className="w-5 h-5" />
-                <span>Ver Pílulas 5S</span>
-              </button>
-
-              <button
-                onClick={() => setStep('challenge')}
-                className="p-3.5 rounded-2xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs sm:text-sm font-semibold transition cursor-pointer flex flex-col items-center justify-center text-center gap-1.5"
-              >
-                <Trophy className="w-5 h-5 text-emerald-400" />
-                <span>Desafio 5S (2 min)</span>
-              </button>
-            </div>
-
-            <div className="pt-3 border-t border-white/10 flex justify-between items-center text-xs text-slate-400">
-              <button
-                onClick={() => setStep('hook')}
-                className="text-slate-400 hover:text-white transition cursor-pointer font-medium"
-              >
-                ← Voltar à pergunta inicial
-              </button>
-
-              <button
-                onClick={() => setStep('gemini')}
-                className="text-purple-400 hover:text-purple-300 hover:underline flex items-center gap-1 cursor-pointer font-medium"
-              >
-                <Bot className="w-3.5 h-3.5" /> Tirar Dúvidas com Gemini IA
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* STEP: CANAL KAIZEN (IDEA REGISTRATION WITH VOICE & GEMINI AI REFINEMENT) */}
-        {step === 'canal_kaizen' && (
-          <motion.div
-            key="canal_kaizen"
-            initial={{ opacity: 0, y: 15, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -15, scale: 0.98 }}
-            className="bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
-          >
-            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-amber-400 via-purple-500 to-cyan-400" />
-
-            {/* Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <div className="flex items-center gap-2">
-                <span className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                  <Lightbulb className="w-5 h-5" />
-                </span>
-                <div>
-                  <h3 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
-                    Canal Kaizen • Banco de Ideias
-                  </h3>
-                  <p className="text-xs text-amber-400 font-medium">
-                    Sua ideia valorizada • Voz com IA Gemini & Lean Manufacturing
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setStep('canal_kaizen_list')}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 hover:text-white border border-white/10 transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <ListFilter className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Ideias ({registeredIdeas.length})</span>
-                </button>
-
-                <button
-                  onClick={() => setStep('hook')}
-                  className="text-xs text-slate-400 hover:text-white cursor-pointer px-2 py-1"
-                >
-                  Voltar ✕
-                </button>
-              </div>
-            </div>
-
-            {/* PHASE 1: INPUT (Voice or Typing) */}
+            {/* PHASE 1: INPUT BY VOICE OR TYPING */}
             {ideaPhase === 'input' && (
               <div>
-                <p className="text-sm text-slate-300 mb-5 leading-relaxed">
-                  Viu algum desperdício de tempo, ferramenta fora do lugar, risco de segurança ou processo difícil? 
-                  <strong className="text-amber-300"> Fale no microfone</strong> ou digite sua sugestão. O Sensei IA irá estruturar sua proposta para o comitê!
-                </p>
+                {/* Header */}
+                <div className="text-center max-w-2xl mx-auto mb-6">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/30 mb-2">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    Canal Kaizen • Sua Ideia Valorizada
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+                    O que podemos melhorar no seu posto de trabalho hoje?
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-300 mt-1">
+                    Toque no microfone e fale livremente. O <strong className="text-amber-300">Sensei IA</strong> interpreta sua voz e estrutura a proposta automaticamente!
+                  </p>
+                </div>
 
-                {/* Big Voice Recording Button */}
-                <div className="bg-slate-950/70 border border-white/10 rounded-2xl p-6 text-center mb-6">
+                {/* Big Glowing Voice Record Button Hero */}
+                <div className="bg-slate-950/70 border border-white/10 rounded-3xl p-6 sm:p-8 text-center mb-5 relative overflow-hidden">
                   <button
                     type="button"
                     onClick={toggleVoiceRecordingForIdea}
-                    disabled={isRefiningWithAi}
-                    className={`relative mx-auto w-24 h-24 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer shadow-xl ${
-                      isVoiceRecordingIdea
-                        ? 'bg-red-500 text-white shadow-red-500/50 scale-105 animate-pulse'
-                        : 'bg-gradient-to-tr from-amber-500 to-purple-600 hover:from-amber-400 hover:to-purple-500 text-white shadow-amber-500/30 hover:scale-105'
+                    disabled={isStructuring}
+                    className={`relative mx-auto w-24 h-24 sm:w-28 sm:h-28 rounded-full flex flex-col items-center justify-center transition-all duration-300 cursor-pointer shadow-2xl ${
+                      isVoiceRecording
+                        ? 'bg-red-500 text-white shadow-[0_0_35px_rgba(239,68,68,0.6)] scale-105 animate-pulse'
+                        : isStructuring
+                        ? 'bg-slate-800 text-slate-400 scale-95'
+                        : 'bg-gradient-to-tr from-amber-500 via-amber-400 to-yellow-300 text-slate-950 hover:scale-105 shadow-[0_0_30px_rgba(245,158,11,0.35)]'
                     }`}
                   >
-                    {isVoiceRecordingIdea ? (
+                    {isVoiceRecording ? (
                       <>
-                        <MicOff className="w-9 h-9 mb-1" />
-                        <span className="text-[10px] font-bold tracking-wider uppercase">Parar</span>
+                        <MicOff className="w-10 h-10 mb-1" />
+                        <span className="text-[10px] font-extrabold tracking-wider uppercase">Parar</span>
                       </>
+                    ) : isStructuring ? (
+                      <RefreshCw className="w-9 h-9 animate-spin text-amber-400" />
                     ) : (
                       <>
-                        <Mic className="w-9 h-9 mb-1" />
-                        <span className="text-[10px] font-bold tracking-wider uppercase">Gravar Voz</span>
+                        <Mic className="w-10 h-10 mb-1 text-slate-950" />
+                        <span className="text-[10px] font-extrabold tracking-wider uppercase text-slate-950">Gravar Voz</span>
                       </>
                     )}
                   </button>
 
                   <div className="mt-4">
-                    {isVoiceRecordingIdea ? (
-                      <div className="flex items-center justify-center gap-2 text-red-400 font-semibold text-sm animate-pulse">
+                    {isVoiceRecording ? (
+                      <div className="flex items-center justify-center gap-2 text-red-400 font-bold text-sm animate-pulse">
                         <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                        Ouvindo sua ideia... Fale com naturalidade!
+                        Ouvindo sua ideia... Fale com tranquilidade!
                       </div>
-                    ) : isRefiningWithAi ? (
-                      <div className="flex items-center justify-center gap-2 text-purple-400 font-semibold text-sm">
-                        <RefreshCw className="w-4 h-4 animate-spin text-purple-400" />
-                        Sensei Gemini lapidando sua ideia Kaizen...
+                    ) : isStructuring ? (
+                      <div className="flex items-center justify-center gap-2 text-amber-300 font-semibold text-sm">
+                        <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                        O Sensei IA está estruturando sua proposta...
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-400">
-                        Toque no microfone para falar livremente. O Gemini corrige falhas do áudio e organiza a proposta.
+                      <p className="text-xs sm:text-sm text-slate-400">
+                        Toque no botão e diga qual problema você viu ou como gostaria de resolver.
                       </p>
                     )}
                   </div>
                 </div>
 
-                {/* Processing State when Voice or Text is being structured */}
-                {isRefiningWithAi ? (
-                  <div className="py-10 text-center bg-slate-950/70 border border-purple-500/30 rounded-2xl p-6">
-                    <div className="w-14 h-14 rounded-2xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center mx-auto mb-3">
-                      <RefreshCw className="w-7 h-7 text-purple-400 animate-spin" />
-                    </div>
-                    <h4 className="text-base font-bold text-white mb-1">
-                      Sensei IA Estruturando sua Ideia...
-                    </h4>
-                    <p className="text-xs text-purple-300 max-w-md mx-auto">
-                      Interpretando sua fala e organizando problema, solução e benefícios técnicos para você revisar.
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    {/* Alternative: Typed Input */}
-                    <div className="mb-4">
-                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
-                        <span>Ou digite sua sugestão de melhoria:</span>
-                        <span className="text-slate-500 font-normal">Chão de fábrica / Processos</span>
-                      </label>
+                {/* Direct Typing Alternative */}
+                {!isStructuring && (
+                  <div className="space-y-3">
+                    <div className="relative">
                       <textarea
-                        value={rawIdeaVoice}
-                        onChange={(e) => setRawIdeaVoice(e.target.value)}
-                        placeholder="Ex: A esteira 4 fica travando porque junta pó na guia lateral, devia ter um suporte de escova ou aspirador ali perto..."
-                        rows={3}
-                        className="w-full bg-slate-950/70 border border-white/10 rounded-2xl p-4 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-400 transition"
+                        value={rawIdeaInput}
+                        onChange={(e) => setRawIdeaInput(e.target.value)}
+                        placeholder="Ou digite sua sugestão aqui... (ex: na linha 3 falta suporte para o leitor de código de barras, isso atrasa o bip das peças)"
+                        rows={2}
+                        className="w-full bg-slate-950/70 border border-white/10 rounded-2xl p-3.5 text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:border-amber-400 transition"
                       />
                     </div>
 
-                    {/* Action Bar for Typed Input */}
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-[11px] text-slate-400 hidden sm:inline">
-                        💡 A fala é interpretada e lapidada automaticamente pelo Sensei.
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400">
+                        ⚡ Ideias práticas e simples são as mais bem avaliadas no comitê.
                       </span>
+
                       <button
                         type="button"
-                        onClick={() => refineIdeaWithGemini(rawIdeaVoice)}
-                        disabled={!rawIdeaVoice.trim()}
-                        className="ml-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 hover:opacity-95 disabled:opacity-30 text-white font-bold text-xs sm:text-sm transition cursor-pointer flex items-center gap-2 shadow-md shadow-purple-500/20"
+                        onClick={() => structureIdeaProposal(rawIdeaInput)}
+                        disabled={!rawIdeaInput.trim()}
+                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:opacity-95 disabled:opacity-30 text-slate-950 font-bold text-xs sm:text-sm transition cursor-pointer flex items-center gap-2 shadow-lg shadow-amber-500/20"
                       >
-                        <span>Continuar para Revisão</span>
+                        <span>Avançar para Revisão</span>
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     </div>
@@ -808,28 +568,29 @@ export function KaizenInteraction({
               </div>
             )}
 
-            {/* PHASE 2: REVIEW & EDIT (User checks the AI-refined idea and can edit before submitting) */}
+            {/* PHASE 2: REVIEW & EDIT (CLEAN PROPOSAL CARD) */}
             {ideaPhase === 'review' && (
               <form onSubmit={handleConfirmIdeaSubmission} className="space-y-4">
-                
-                {/* Notification Banner */}
-                <div className="bg-purple-500/15 border border-purple-500/30 rounded-2xl p-4 flex items-start gap-3">
-                  <Sparkles className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
-                  <div className="text-xs sm:text-sm text-purple-200 leading-relaxed">
-                    <strong>Ideia Lapidada pelo Sensei IA:</strong> Revisamos sua fala para deixá-la no padrão técnico Kaizen. Você tem controle total: edite o que quiser antes de enviar!
+                <div className="flex items-center justify-between gap-3 bg-amber-500/15 border border-amber-500/30 rounded-2xl p-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <Sparkles className="w-5 h-5 text-amber-400 shrink-0" />
+                    <div>
+                      <h4 className="text-sm font-bold text-white">Proposta Estruturada pelo Sensei IA</h4>
+                      <p className="text-xs text-amber-200">Revisamos sua ideia para o formato oficial. Ajuste os campos se desejar e confirme!</p>
+                    </div>
                   </div>
                 </div>
 
-                {/* Original Audio Card (if voice was used) */}
-                {rawIdeaVoice && (
-                  <div className="bg-slate-950/60 border border-white/5 rounded-xl p-3 text-xs text-slate-400">
-                    <span className="font-semibold text-slate-300 block mb-0.5">🎙️ Transcrição do seu áudio:</span>
-                    <span className="italic text-slate-400">&ldquo;{rawIdeaVoice}&rdquo;</span>
+                {/* Original Audio Transcription */}
+                {rawIdeaInput && (
+                  <div className="bg-slate-950/60 border border-white/5 rounded-xl px-3.5 py-2 text-xs text-slate-400">
+                    <span className="font-semibold text-slate-300 block mb-0.5">🎙️ O que você disse:</span>
+                    <span className="italic text-slate-300">&ldquo;{rawIdeaInput}&rdquo;</span>
                   </div>
                 )}
 
+                {/* Title & Category Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* Title */}
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-300 mb-1">
                       Título da Melhoria:
@@ -843,7 +604,6 @@ export function KaizenInteraction({
                     />
                   </div>
 
-                  {/* Category */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1">
                       Categoria:
@@ -894,13 +654,13 @@ export function KaizenInteraction({
                 {/* Benefits */}
                 <div>
                   <label className="block text-xs font-semibold text-cyan-300 mb-1">
-                    Benefício Esperado (Para o posto e equipe):
+                    Benefício Esperado:
                   </label>
                   <textarea
                     value={ideaBenefits}
                     onChange={(e) => setIdeaBenefits(e.target.value)}
-                    rows={2}
-                    className="w-full bg-slate-950/70 border border-white/10 rounded-xl p-3 text-xs sm:text-sm text-white focus:outline-none focus:border-cyan-400"
+                    rows={1}
+                    className="w-full bg-slate-950/70 border border-white/10 rounded-xl p-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-cyan-400"
                   />
                 </div>
 
@@ -914,7 +674,7 @@ export function KaizenInteraction({
                       type="text"
                       value={ideaAuthor}
                       onChange={(e) => setIdeaAuthor(e.target.value)}
-                      placeholder="Ex: Carlos Oliveira (ou deixe em branco)"
+                      placeholder="Ex: Carlos Oliveira (ou deixe anônimo)"
                       className="w-full bg-slate-950/70 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-white/30"
                     />
                   </div>
@@ -937,67 +697,65 @@ export function KaizenInteraction({
                 <div className="pt-3 border-t border-white/10 flex flex-wrap justify-between items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => {
-                      setIdeaPhase('input');
-                    }}
-                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1.5"
+                    onClick={() => setIdeaPhase('input')}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1.5"
                   >
-                    <Mic className="w-3.5 h-3.5" /> Regravar / Digitar Novamente
+                    <Mic className="w-3.5 h-3.5" /> Regravar / Ajustar
                   </button>
 
                   <button
                     type="submit"
-                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-sm transition cursor-pointer flex items-center gap-2 shadow-lg shadow-emerald-500/25"
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-sm transition cursor-pointer flex items-center gap-2 shadow-lg shadow-emerald-500/30"
                   >
-                    <FileCheck className="w-4 h-4" />
-                    Confirmar e Cadastrar Ideia Kaizen
+                    <FileCheck className="w-4 h-4 text-slate-950" />
+                    Confirmar e Cadastrar no Canal Kaizen
                   </button>
                 </div>
               </form>
             )}
 
-            {/* PHASE 3: SUCCESS & PROTOCOL */}
+            {/* PHASE 3: SUCCESS CONFIRMATION */}
             {ideaPhase === 'success' && lastSubmittedIdea && (
               <div className="text-center py-4">
-                <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center mx-auto mb-3 shadow-[0_0_20px_rgba(52,211,153,0.3)]">
+                <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center mx-auto mb-3 shadow-[0_0_25px_rgba(52,211,153,0.35)]">
                   <CheckCircle2 className="w-9 h-9 text-emerald-400" />
                 </div>
 
-                <h4 className="text-xl sm:text-2xl font-bold text-white mb-1">
-                  Ideia Registrada no Canal Kaizen!
-                </h4>
+                <h3 className="text-xl sm:text-2xl font-bold text-white mb-1">
+                  Ideia Registrada com Sucesso!
+                </h3>
                 
-                <div className="inline-block px-4 py-1.5 rounded-full bg-cyan-950 border border-cyan-500/40 text-cyan-300 font-mono font-bold text-sm my-3 shadow-md">
+                <div className="inline-block px-4 py-1.5 rounded-full bg-cyan-950 border border-cyan-500/40 text-cyan-300 font-mono font-bold text-sm my-2 shadow-md">
                   Protocolo: {lastSubmittedIdea.protocol}
                 </div>
 
-                <p className="text-sm text-slate-300 max-w-lg mx-auto mb-6 leading-relaxed">
-                  Obrigado, <strong className="text-white">{lastSubmittedIdea.authorName}</strong>! Sua proposta foi enviada para o painel de melhorias contínuas. Cada pequena mudança aproxima a fábrica da perfeição.
+                <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto mb-5 leading-relaxed">
+                  Obrigado, <strong className="text-white">{lastSubmittedIdea.authorName}</strong>! Sua proposta foi enviada diretamente para a comissão de melhorias contínuas.
                 </p>
 
-                <div className="bg-slate-950/60 border border-white/10 rounded-2xl p-4 max-w-md mx-auto mb-6 text-left text-xs">
+                <div className="bg-slate-950/70 border border-white/10 rounded-2xl p-4 max-w-md mx-auto mb-6 text-left text-xs">
                   <div className="font-bold text-white mb-1 text-sm">{lastSubmittedIdea.title}</div>
-                  <div className="text-slate-400 mb-2">Categoria: <span className="text-amber-400 font-semibold">{lastSubmittedIdea.category}</span></div>
+                  <div className="text-slate-400 mb-1.5">Categoria: <span className="text-amber-400 font-semibold">{lastSubmittedIdea.category}</span></div>
                   <div className="text-slate-300"><strong className="text-emerald-400">Solução:</strong> {lastSubmittedIdea.solution}</div>
                 </div>
 
                 <div className="flex flex-wrap justify-center items-center gap-3">
                   <button
                     onClick={() => {
-                      setRawIdeaVoice('');
+                      setRawIdeaInput('');
                       setIdeaTitle('');
                       setIdeaProblem('');
                       setIdeaSolution('');
                       setIdeaBenefits('');
                       setIdeaPhase('input');
                     }}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 hover:opacity-95 text-white font-bold text-xs sm:text-sm transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-amber-500/20"
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:opacity-95 text-slate-950 font-bold text-xs sm:text-sm transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-amber-500/20"
                   >
                     <Lightbulb className="w-4 h-4" /> Cadastrar Outra Ideia
                   </button>
 
                   <button
-                    onClick={() => setStep('canal_kaizen_list')}
+                    onClick={() => setActiveTab('list')}
                     className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm font-semibold transition cursor-pointer flex items-center gap-1.5"
                   >
                     <ListFilter className="w-4 h-4 text-cyan-400" /> Ver Banco de Ideias
@@ -1015,16 +773,151 @@ export function KaizenInteraction({
           </motion.div>
         )}
 
-        {/* STEP: CANAL KAIZEN LIST (VIEW SUBMITTED IDEAS) */}
-        {step === 'canal_kaizen_list' && (
+        {/* ========================================================================= */}
+        {/* TAB 2: CONVERSAR COM SENSEI IA - DIRECT, FAST & INSPIRATIONAL             */}
+        {/* ========================================================================= */}
+        {activeTab === 'chat' && (
           <motion.div
-            key="canal_kaizen_list"
-            initial={{ opacity: 0, y: 15, scale: 0.98 }}
+            key="tab_chat"
+            initial={{ opacity: 0, y: 12, scale: 0.99 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -15, scale: 0.98 }}
-            className="bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
+            exit={{ opacity: 0, y: -12, scale: 0.99 }}
+            className="bg-slate-900/90 backdrop-blur-2xl border border-white/15 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden"
           >
-            <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500" />
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-cyan-400" />
+
+            {/* Header */}
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                  <Bot className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                    Sensei IA • Consultor Kaizen & 5S
+                  </h3>
+                  <p className="text-xs text-cyan-300">
+                    Respostas sábias com áudio falado • Pergunte por voz ou texto
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setActiveTab('idea');
+                  setIdeaPhase('input');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Lightbulb className="w-3.5 h-3.5 text-amber-400" />
+                <span>Canal Kaizen</span>
+              </button>
+            </div>
+
+            {/* Quick Consultation Chips */}
+            <div className="mb-4">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                Perguntas Frequentes do Chão de Fábrica:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {[
+                  "Como organizar minha bancada com 5S?",
+                  "O que é Poka-Yoke na prática?",
+                  "Como identificar desperdícios de tempo?",
+                  "Dica de segurança para o turno de hoje"
+                ].map((q, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setChatInput(q);
+                      handleAskSensei(q);
+                    }}
+                    className="p-2.5 rounded-xl bg-slate-950/60 hover:bg-cyan-500/15 border border-white/10 hover:border-cyan-500/40 text-left text-xs text-slate-200 hover:text-cyan-300 transition cursor-pointer flex items-center justify-between"
+                  >
+                    <span>{q}</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1" />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Sensei Audio Speech Bubble Response Display */}
+            {aiResponse && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-slate-950/80 border border-cyan-500/40 rounded-2xl p-4 sm:p-5 mb-4 relative shadow-lg shadow-cyan-500/10"
+              >
+                <div className="flex items-center justify-between gap-2 mb-2 text-cyan-400 text-xs font-bold uppercase tracking-wider">
+                  <span className="flex items-center gap-1.5">
+                    <Volume2 className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    O Sensei Responde:
+                  </span>
+                  <button
+                    onClick={() => onSpeak(aiResponse)}
+                    className="text-[11px] text-cyan-400 hover:text-cyan-300 hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    Repetir Voz 🔊
+                  </button>
+                </div>
+                <p className="text-slate-100 text-sm sm:text-base leading-relaxed font-medium">
+                  &ldquo;{aiResponse}&rdquo;
+                </p>
+              </motion.div>
+            )}
+
+            {/* Input Bar: Voice Microphone + Text + Send */}
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAskSensei()}
+                placeholder="Pergunte ao Sensei... (ex: como evitar retrabalho na esteira?)"
+                className="flex-1 bg-slate-950/70 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+              />
+
+              <button
+                type="button"
+                onClick={toggleSpeechForChat}
+                className={`p-3 rounded-2xl border transition cursor-pointer ${
+                  isChatListening
+                    ? 'bg-red-500/20 border-red-500 text-red-400 animate-pulse'
+                    : 'bg-slate-800/80 border-white/10 text-slate-300 hover:text-cyan-300 hover:border-cyan-500/40'
+                }`}
+                title={isChatListening ? "Ouvindo... Toque para parar" : "Falar pergunta no microfone"}
+              >
+                {isChatListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleAskSensei()}
+                disabled={isAiLoading || !chatInput.trim()}
+                className="px-5 py-3 rounded-2xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-slate-950 font-bold transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-cyan-500/25"
+              >
+                {isAiLoading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                ) : (
+                  <Send className="w-4 h-4 text-slate-950" />
+                )}
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: BANCO DE IDEIAS (LISTA DE PROPOSTAS DO TOTEN)                       */}
+        {/* ========================================================================= */}
+        {activeTab === 'list' && (
+          <motion.div
+            key="tab_list"
+            initial={{ opacity: 0, y: 12, scale: 0.99 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.99 }}
+            className="bg-slate-900/90 backdrop-blur-2xl border border-white/15 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-amber-400" />
 
             <div className="flex items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-2">
@@ -1032,58 +925,49 @@ export function KaizenInteraction({
                   <ListFilter className="w-5 h-5" />
                 </span>
                 <div>
-                  <h3 className="text-xl sm:text-2xl font-bold text-white">
-                    Banco de Ideias do Toten
+                  <h3 className="text-lg sm:text-xl font-bold text-white">
+                    Banco de Ideias do Canal Kaizen
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Sugestões cadastradas pelos operadores no Canal Kaizen
+                    Propostas cadastradas pelos operadores no toten
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setStep('canal_kaizen');
-                    setIdeaPhase('input');
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold transition cursor-pointer flex items-center gap-1"
-                >
-                  <Lightbulb className="w-3.5 h-3.5" /> Nova Ideia
-                </button>
-
-                <button
-                  onClick={() => setStep('hook')}
-                  className="text-xs text-slate-400 hover:text-white cursor-pointer px-2 py-1"
-                >
-                  Voltar ✕
-                </button>
-              </div>
+              <button
+                onClick={() => {
+                  setActiveTab('idea');
+                  setIdeaPhase('input');
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-500/20"
+              >
+                <Lightbulb className="w-3.5 h-3.5" /> Nova Ideia
+              </button>
             </div>
 
             {registeredIdeas.length === 0 ? (
-              <div className="text-center py-12 bg-slate-950/40 rounded-2xl border border-white/5">
-                <Lightbulb className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <h4 className="text-base font-bold text-white mb-1">Nenhuma ideia cadastrada ainda</h4>
+              <div className="text-center py-10 bg-slate-950/40 rounded-2xl border border-white/5">
+                <Lightbulb className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+                <h4 className="text-sm font-bold text-white mb-1">Nenhuma ideia cadastrada ainda</h4>
                 <p className="text-xs text-slate-400 mb-4 max-w-sm mx-auto">
                   Seja o primeiro a enviar uma proposta de melhoria contínua usando a voz ou o teclado!
                 </p>
                 <button
                   onClick={() => {
-                    setStep('canal_kaizen');
+                    setActiveTab('idea');
                     setIdeaPhase('input');
                   }}
-                  className="px-5 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition cursor-pointer"
                 >
                   Cadastrar Primeira Ideia
                 </button>
               </div>
             ) : (
-              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-[46vh] overflow-y-auto pr-1">
                 {registeredIdeas.map((idea) => (
                   <div
                     key={idea.id}
-                    className="p-4 rounded-2xl bg-slate-950/60 border border-white/10 hover:border-cyan-500/40 transition"
+                    className="p-3.5 rounded-2xl bg-slate-950/60 border border-white/10 hover:border-cyan-500/40 transition"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                       <div className="flex items-center gap-2">
@@ -1117,247 +1001,6 @@ export function KaizenInteraction({
                 ))}
               </div>
             )}
-          </motion.div>
-        )}
-
-        {/* STEP: KAIZEN KNOWLEDGE PILLS */}
-        {step === 'pill' && (
-          <motion.div
-            key="pill"
-            initial={{ opacity: 0, y: 15, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -15, scale: 0.98 }}
-            className="bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
-          >
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-500" />
-
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                <BookOpen className="w-3.5 h-3.5" />
-                Pílula #{selectedPillIndex + 1} de {KAIZEN_PILLS.length}
-              </span>
-              <span className="text-xs text-slate-400">{KAIZEN_PILLS[selectedPillIndex].tag}</span>
-            </div>
-
-            <h3 className="text-2xl font-bold text-white mb-1">
-              {KAIZEN_PILLS[selectedPillIndex].title}
-            </h3>
-            <p className="text-sm font-medium text-cyan-400 mb-4">
-              {KAIZEN_PILLS[selectedPillIndex].subtitle}
-            </p>
-
-            <div className="bg-slate-950/60 border border-white/5 rounded-2xl p-4 sm:p-5 mb-4 text-slate-200 text-sm sm:text-base leading-relaxed">
-              {KAIZEN_PILLS[selectedPillIndex].content}
-            </div>
-
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3.5 mb-6 text-xs sm:text-sm text-amber-300">
-              💡 {KAIZEN_PILLS[selectedPillIndex].tip}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <button
-                onClick={() => setStep('intro')}
-                className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 text-sm font-medium transition cursor-pointer flex items-center gap-1.5"
-              >
-                <RefreshCw className="w-4 h-4" /> Voltar
-              </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setStep('canal_kaizen');
-                    setIdeaPhase('input');
-                  }}
-                  className="px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-sm font-semibold transition cursor-pointer flex items-center gap-1.5"
-                >
-                  <Lightbulb className="w-4 h-4" /> Canal Kaizen
-                </button>
-
-                <button
-                  onClick={handleNextPill}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-sm font-semibold transition shadow-lg shadow-cyan-500/20 cursor-pointer flex items-center gap-1.5"
-                >
-                  Próxima Pílula <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* STEP: GEMINI AI CHAT & CONSULTATION */}
-        {step === 'gemini' && (
-          <motion.div
-            key="gemini"
-            initial={{ opacity: 0, y: 15, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -15, scale: 0.98 }}
-            className="bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
-          >
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-purple-500 via-cyan-500 to-blue-500" />
-
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase bg-purple-500/15 text-purple-300 border border-purple-500/30">
-                <Bot className="w-3.5 h-3.5 text-purple-400" />
-                Sensei Gemini IA • Resposta por Voz
-              </span>
-              <button
-                onClick={() => setStep('hook')}
-                className="text-xs text-slate-400 hover:text-white cursor-pointer"
-              >
-                Voltar ✕
-              </button>
-            </div>
-
-            <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">
-              Pergunte qualquer coisa ao Sensei! 🥋
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-300 mb-4">
-              Dúvidas sobre o posto de trabalho, 5S, desperdícios ou processos? O Sensei responde e fala com você!
-            </p>
-
-            {/* Quick Questions Pills */}
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              {[
-                "Como organizar minha bancada com 5S?",
-                "O que é Poka-Yoke na prática?",
-                "Como evitar peças com defeito?",
-                "Qual a regra de ouro do Kaizen?"
-              ].map((q, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => {
-                    setChatInput(q);
-                    handleAskGemini(q);
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-cyan-500/20 border border-white/10 text-xs text-cyan-300 transition cursor-pointer"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-
-            {/* AI Response Display Card */}
-            {aiResponse && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-slate-950/70 border border-cyan-500/30 rounded-2xl p-4 mb-4 relative"
-              >
-                <div className="flex items-center gap-2 mb-2 text-cyan-400 text-xs font-bold uppercase tracking-wider">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Sensei Responde:
-                </div>
-                <p className="text-slate-100 text-sm sm:text-base leading-relaxed">
-                  &ldquo;{aiResponse}&rdquo;
-                </p>
-              </motion.div>
-            )}
-
-            {/* Input Bar with Voice Recognition button */}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAskGemini()}
-                placeholder="Ex: Como organizar a bancada de trabalho?"
-                className="flex-1 bg-slate-950/70 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-              />
-
-              <button
-                type="button"
-                onClick={startSpeechForChat}
-                className={`p-3 rounded-2xl border transition cursor-pointer ${
-                  chatListening
-                    ? 'bg-red-500/20 border-red-500 text-red-400 animate-pulse'
-                    : 'bg-slate-800/80 border-white/10 text-slate-300 hover:text-cyan-300'
-                }`}
-                title={chatListening ? "Ouvindo... Toque para parar" : "Falar pergunta no microfone"}
-              >
-                {chatListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleAskGemini()}
-                disabled={isAiLoading || !chatInput.trim()}
-                className="px-5 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 text-white font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-cyan-500/20"
-              >
-                {isAiLoading ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* STEP: DAILY 5S / KAIZEN CHALLENGE */}
-        {step === 'challenge' && (
-          <motion.div
-            key="challenge"
-            initial={{ opacity: 0, y: 15, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -15, scale: 0.98 }}
-            className="bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden"
-          >
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-500 to-emerald-500" />
-
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                <Trophy className="w-3.5 h-3.5" />
-                Desafio 5S do Turno
-              </span>
-              <span className="text-xs text-slate-400">Meta Rápida (2 minutos)</span>
-            </div>
-
-            <h3 className="text-2xl font-bold text-white mb-2">
-              Missão Kaizen de Hoje: Seiri (Descarte Consciente)
-            </h3>
-            <p className="text-slate-300 text-sm sm:text-base mb-6 leading-relaxed">
-              Dê uma olhada na sua estação de trabalho agora. Identifique <strong className="text-cyan-400">1 objeto, papel ou ferramenta</strong> que não tem mais utilidade ou está no lugar errado. Guarde no local correto ou descarte adequadamente!
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-              <div className="bg-slate-800/60 border border-white/5 rounded-2xl p-4 flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-sm font-semibold text-white">Mais Espaço e Foco</h4>
-                  <p className="text-xs text-slate-400 mt-0.5">Menos poluição visual reduz o estresse e evita perdas de ferramentas.</p>
-                </div>
-              </div>
-              <div className="bg-slate-800/60 border border-white/5 rounded-2xl p-4 flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-sm font-semibold text-white">Segurança em Primeiro Lugar</h4>
-                  <p className="text-xs text-slate-400 mt-0.5">Piso e bancadas limpas previnem acidentes e tropeços.</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <button
-                onClick={() => setStep('intro')}
-                className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 text-sm font-medium transition cursor-pointer"
-              >
-                Voltar
-              </button>
-
-              <button
-                onClick={() => {
-                  confetti({ particleCount: 120, spread: 90, origin: { y: 0.6 } });
-                  onSpeak("Missão aceita! Bom turno e excelente trabalho!");
-                  onStateChange('success');
-                  setTimeout(() => {
-                    setStep('hook');
-                  }, 2500);
-                }}
-                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-sm font-bold transition shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center gap-2"
-              >
-                <CheckCircle2 className="w-4 h-4" /> Aceito a Missão!
-              </button>
-            </div>
           </motion.div>
         )}
 

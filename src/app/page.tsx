@@ -197,7 +197,7 @@ export default function TotenPage() {
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-cyan-400" />
-            Toten Kiosk v1.3 • Canal Kaizen & Gemini IA
+            Toten Kiosk v1.3 • Canal Kaizen & Sensei IA
           </span>
           <span>•</span>
           <span className="text-slate-400">Desenvolvido para Chão de Fábrica & Melhoria Contínua</span>
