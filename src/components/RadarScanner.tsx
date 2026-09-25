@@ -1,13 +1,12 @@
 "use client";
 
 import React from 'react';
-import { motion } from 'framer-motion';
 
 interface RadarScannerProps {
   isScanning: boolean;
 }
 
-export function RadarScanner({ isScanning }: RadarScannerProps) {
+export const RadarScanner = React.memo(function RadarScanner({ isScanning }: RadarScannerProps) {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none z-0 flex items-center justify-center">
       {/* Background radial gradient glow matching big-bag-calculator */}
@@ -35,38 +34,25 @@ export function RadarScanner({ isScanning }: RadarScannerProps) {
         <div className="absolute inset-x-0 top-1/2 h-px bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
         <div className="absolute inset-y-0 left-1/2 w-px bg-gradient-to-b from-transparent via-cyan-500/20 to-transparent" />
 
-        {/* Sweeping Radar beam (active when scanning/idle) */}
+        {/* Sweeping Radar beam (GPU compositor accelerated CSS animation) */}
         {isScanning && (
-          <motion.div
-            className="absolute inset-0 rounded-full"
+          <div
+            className="absolute inset-0 rounded-full animate-spin pointer-events-none"
             style={{
+              animationDuration: '4s',
               background: 'conic-gradient(from 0deg, transparent 0deg, transparent 270deg, rgba(6, 182, 212, 0.15) 360deg)'
-            }}
-            animate={{ rotate: 360 }}
-            transition={{
-              repeat: Infinity,
-              duration: 4,
-              ease: "linear"
             }}
           />
         )}
 
-        {/* Sonar Pulse Ping */}
+        {/* Sonar Pulse Ping (GPU compositor accelerated CSS animation) */}
         {isScanning && (
-          <motion.div
-            className="absolute w-full h-full rounded-full border border-cyan-400/40"
-            animate={{
-              scale: [0.3, 1],
-              opacity: [0.8, 0],
-            }}
-            transition={{
-              repeat: Infinity,
-              duration: 2.5,
-              ease: "easeOut",
-            }}
+          <div
+            className="absolute w-full h-full rounded-full border border-cyan-400/40 animate-ping pointer-events-none"
+            style={{ animationDuration: '2.5s' }}
           />
         )}
       </div>
     </div>
   );
-}
+});

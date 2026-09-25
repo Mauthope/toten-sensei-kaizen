@@ -9,7 +9,7 @@ interface SenseiAvatarProps {
   isSpeaking?: boolean;
 }
 
-export function SenseiAvatar({ state, isSpeaking = false }: SenseiAvatarProps) {
+export const SenseiAvatar = React.memo(function SenseiAvatar({ state, isSpeaking = false }: SenseiAvatarProps) {
   const isIdle = state === 'idle';
 
   return (
@@ -379,4 +379,4 @@ export function SenseiAvatar({ state, isSpeaking = false }: SenseiAvatarProps) {
       </motion.div>
     </div>
   );
-}
+});

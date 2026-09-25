@@ -11,7 +11,7 @@ interface HeaderNavProps {
   onToggleFacingMode?: () => void;
 }
 
-export function HeaderNav({
+export const HeaderNav = React.memo(function HeaderNav({
   isMuted,
   onToggleMute,
   personDetected,
@@ -165,4 +165,4 @@ export function HeaderNav({
       )}
     </>
   );
-}
+});

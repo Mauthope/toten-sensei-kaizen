@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { IDLE_PHRASES } from '../lib/kaizenData';
 import { Search, Eye, Sparkles } from 'lucide-react';
 
-export function IdleScreensaver() {
+export const IdleScreensaver = React.memo(function IdleScreensaver() {
   const [phraseIndex, setPhraseIndex] = useState(0);
 
   useEffect(() => {
@@ -55,4 +55,4 @@ export function IdleScreensaver() {
       </motion.div>
     </div>
   );
-}
+});
