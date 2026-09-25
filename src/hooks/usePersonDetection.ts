@@ -238,6 +238,8 @@ export function usePersonDetection({
     }
   }, [refreshDevices]);
 
+  const lastDetectionsRef = useRef<any[]>([]);
+
   // Detection Loop with Throttling
   useEffect(() => {
     if (!cameraActive || !modelRef.current || !videoRef.current || isSimulated) {
@@ -255,8 +257,58 @@ export function usePersonDetection({
       const model = modelRef.current;
       const canvas = canvasRef.current;
 
-      if (video && model && video.readyState >= 2 && !video.paused) {
-        if (time - lastInferenceTime >= INFERENCE_INTERVAL_MS && !isDetectingRef.current) {
+      if (video && video.readyState >= 2 && !video.paused) {
+        // 1. Draw live camera frame and HUD overlay to canvas
+        if (canvas) {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+              canvas.width = video.videoWidth || 640;
+              canvas.height = video.videoHeight || 480;
+            }
+            // Draw real video frame
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Tech center reticle
+            const cw = canvas.width;
+            const ch = canvas.height;
+            ctx.strokeStyle = 'rgba(6, 182, 212, 0.35)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(cw / 2, ch / 2, 45, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Draw bounding boxes for persons
+            lastDetectionsRef.current.forEach((p: any) => {
+              const [x, y, w, h] = p.bbox;
+              ctx.strokeStyle = '#06b6d4';
+              ctx.lineWidth = 3;
+              ctx.strokeRect(x, y, w, h);
+              ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
+              ctx.fillRect(x, y, w, h);
+
+              // Cyber Corner brackets
+              const cLen = 14;
+              ctx.strokeStyle = '#38bdf8';
+              ctx.lineWidth = 4;
+              ctx.beginPath();
+              ctx.moveTo(x, y + cLen);
+              ctx.lineTo(x, y);
+              ctx.lineTo(x + cLen, y);
+              ctx.moveTo(x + w - cLen, y);
+              ctx.lineTo(x + w, y);
+              ctx.lineTo(x + w, y + cLen);
+              ctx.stroke();
+
+              ctx.fillStyle = '#06b6d4';
+              ctx.font = 'bold 16px Outfit, sans-serif';
+              ctx.fillText(`Pessoa Detectada: ${(p.score * 100).toFixed(0)}%`, x, y > 20 ? y - 8 : 20);
+            });
+          }
+        }
+
+        // 2. Run AI detection on throttled interval
+        if (model && time - lastInferenceTime >= INFERENCE_INTERVAL_MS && !isDetectingRef.current) {
           isDetectingRef.current = true;
           lastInferenceTime = time;
 
@@ -268,32 +320,10 @@ export function usePersonDetection({
               (p: any) => p.class === 'person' && p.score >= 0.45
             );
 
+            lastDetectionsRef.current = personDetections;
             const hasPerson = personDetections.length > 0;
             const bestDetection = personDetections[0];
             const now = Date.now();
-
-            // Draw bounding boxes on canvas if visible
-            if (canvas) {
-              const ctx = canvas.getContext('2d');
-              if (ctx) {
-                canvas.width = video.videoWidth || 640;
-                canvas.height = video.videoHeight || 480;
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                personDetections.forEach((p: any) => {
-                  const [x, y, w, h] = p.bbox;
-                  ctx.strokeStyle = '#06b6d4';
-                  ctx.lineWidth = 3;
-                  ctx.strokeRect(x, y, w, h);
-                  ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
-                  ctx.fillRect(x, y, w, h);
-
-                  ctx.fillStyle = '#06b6d4';
-                  ctx.font = 'bold 16px Outfit, sans-serif';
-                  ctx.fillText(`Pessoa: ${(p.score * 100).toFixed(0)}%`, x, y > 20 ? y - 8 : 20);
-                });
-              }
-            }
 
             if (hasPerson) {
               lastSeenRef.current = now;

@@ -68,7 +68,13 @@ export function HeaderNav({
               </h1>
               <span className={`inline-block w-2.5 h-2.5 rounded-full ${personDetected ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-cyan-400 animate-ping'}`} />
             </div>
-            <p className="text-xs text-slate-400">
+            {/* Neon Destaque: Feito por Mauricio Grigol */}
+            <div className="inline-flex items-center gap-1.5 my-0.5">
+              <span className="text-[10px] sm:text-[11px] font-bold tracking-wider uppercase text-cyan-300 drop-shadow-[0_0_8px_rgba(6,182,212,0.9)] bg-cyan-950/60 border border-cyan-500/50 px-2 py-0.5 rounded shadow-[0_0_12px_rgba(6,182,212,0.3)]">
+                ⚡ Feito por Mauricio Grigol
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 hidden sm:block">
               Toten Corporativo • Inteligência Artificial Gemini & 5S
             </p>
           </div>

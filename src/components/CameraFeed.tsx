@@ -6,7 +6,7 @@ import { DetectionResult } from '../types';
 import { CameraDevice } from '../hooks/usePersonDetection';
 
 interface CameraFeedProps {
-  canvasRef: React.RefObject<HTMLCanvasElement>;
+  canvasRef?: React.RefObject<HTMLCanvasElement>;
   cameraActive: boolean;
   cameraError: string | null;
   detection: DetectionResult;
@@ -58,45 +58,47 @@ export function CameraFeed({
             </button>
           </div>
 
-          {/* Canvas Diagnostic Overlay Preview */}
-          <div className="relative w-full aspect-video bg-black/90 rounded-xl overflow-hidden border border-white/10 mb-3 flex items-center justify-center">
-            <canvas
-              ref={canvasRef}
-              className={`w-full h-full object-cover ${facingMode === 'user' ? 'transform -scale-x-100' : ''}`}
-            />
+          {/* Canvas Diagnostic Overlay Preview if provided */}
+          {canvasRef && (
+            <div className="relative w-full aspect-video bg-black/90 rounded-xl overflow-hidden border border-white/10 mb-3 flex items-center justify-center">
+              <canvas
+                ref={canvasRef}
+                className={`w-full h-full object-cover ${facingMode === 'user' ? 'transform -scale-x-100' : ''}`}
+              />
 
-            {!cameraActive && !isLoadingModel && !cameraError && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center bg-slate-950/80">
-                <span className="text-xs text-slate-300 mb-2">Câmera em espera</span>
-                <button
-                  onClick={onRestartCamera}
-                  className="px-3 py-1 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs hover:bg-cyan-500/30 transition cursor-pointer flex items-center gap-1"
-                >
-                  <RefreshCw className="w-3 h-3" /> Iniciar Câmera
-                </button>
-              </div>
-            )}
+              {!cameraActive && !isLoadingModel && !cameraError && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center bg-slate-950/80">
+                  <span className="text-xs text-slate-300 mb-2">Câmera em espera</span>
+                  <button
+                    onClick={onRestartCamera}
+                    className="px-3 py-1 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-xs hover:bg-cyan-500/30 transition cursor-pointer flex items-center gap-1"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Iniciar Câmera
+                  </button>
+                </div>
+              )}
 
-            {isLoadingModel && (
-              <div className="absolute inset-0 bg-slate-950/80 flex flex-col items-center justify-center gap-2 p-3 text-center">
-                <RefreshCw className="w-5 h-5 text-cyan-400 animate-spin" />
-                <span className="text-xs text-slate-300">Carregando Modelo TensorFlow COCO-SSD...</span>
-              </div>
-            )}
+              {isLoadingModel && (
+                <div className="absolute inset-0 bg-slate-950/80 flex flex-col items-center justify-center gap-2 p-3 text-center">
+                  <RefreshCw className="w-5 h-5 text-cyan-400 animate-spin" />
+                  <span className="text-xs text-slate-300">Carregando Modelo TensorFlow COCO-SSD...</span>
+                </div>
+              )}
 
-            {cameraError && (
-              <div className="absolute inset-0 bg-red-950/90 p-3 flex flex-col items-center justify-center text-center">
-                <AlertCircle className="w-5 h-5 text-red-400 mb-1" />
-                <span className="text-xs text-red-200 mb-2">{cameraError}</span>
-                <button
-                  onClick={onRestartCamera}
-                  className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs transition cursor-pointer"
-                >
-                  Tentar Novamente
-                </button>
-              </div>
-            )}
-          </div>
+              {cameraError && (
+                <div className="absolute inset-0 bg-red-950/90 p-3 flex flex-col items-center justify-center text-center">
+                  <AlertCircle className="w-5 h-5 text-red-400 mb-1" />
+                  <span className="text-xs text-red-200 mb-2">{cameraError}</span>
+                  <button
+                    onClick={onRestartCamera}
+                    className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs transition cursor-pointer"
+                  >
+                    Tentar Novamente
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Camera Controls: Frontal vs Traseira & Selection */}
           <div className="space-y-2 mb-3 bg-slate-950/50 p-2.5 rounded-xl border border-white/5 text-xs">

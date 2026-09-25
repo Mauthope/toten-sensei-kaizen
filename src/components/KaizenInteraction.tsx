@@ -25,9 +25,10 @@ import {
 interface KaizenInteractionProps {
   onSpeak: (text: string) => void;
   onStateChange: (state: SenseiState) => void;
+  onReturnToIdle: () => void;
 }
 
-export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionProps) {
+export function KaizenInteraction({ onSpeak, onStateChange, onReturnToIdle }: KaizenInteractionProps) {
   // Navigation steps:
   // 'hook': First dynamic attention-grabber question (no Kaizen jargon yet, relatable workplace problem)
   // 'intro': Sensei introduces Kaizen/5S connecting to the user's specific answer
@@ -42,6 +43,10 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
   const [selectedOption, setSelectedOption] = useState<DynamicHookOption | null>(null);
   const [selectedPillIndex, setSelectedPillIndex] = useState(0);
 
+  // 10-second inactivity countdown for the initial hook screen
+  const [countdown, setCountdown] = useState(10);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
   // Gemini AI Chat states
   const [chatInput, setChatInput] = useState('');
   const [aiResponse, setAiResponse] = useState<string | null>(null);
@@ -53,17 +58,65 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
   const [ideaText, setIdeaText] = useState('');
   const [ideaSubmitted, setIdeaSubmitted] = useState(false);
 
-  // Randomize hook whenever this component mounts (i.e. whenever someone is newly detected!)
+  // Party celebration & dynamic greeting on detection
   useEffect(() => {
+    // 1. Party celebration bursts (confetti!)
+    confetti({
+      particleCount: 80,
+      spread: 75,
+      origin: { y: 0.45 }
+    });
+    setTimeout(() => {
+      confetti({
+        particleCount: 50,
+        spread: 90,
+        origin: { y: 0.5 }
+      });
+    }, 200);
+
+    onStateChange('celebrating');
+
+    // 2. Energetic Party greetings
+    const partyGreetings = [
+      "Ei você aí! Sabe o que é Kaizen?",
+      "Vem aqui, posso te ensinar!",
+      "Tem alguma dúvida sobre melhoria contínua?",
+      "Aha, te vi! O Sensei preparou uma novidade pro seu turno!",
+      "Parado aí, campeão! Chega mais perto da tela!"
+    ];
+    const randomParty = partyGreetings[Math.floor(Math.random() * partyGreetings.length)];
+
     const randomIdx = Math.floor(Math.random() * DYNAMIC_HOOKS.length);
     const chosenHook = DYNAMIC_HOOKS[randomIdx];
     setCurrentHook(chosenHook);
     setStep('hook');
     setSelectedOption(null);
+    setCountdown(10);
 
-    // Speak dynamic attention callout
-    onSpeak(chosenHook.calloutSpeech);
-  }, []); // Run on mount
+    // Speak dynamic celebration phrase + question
+    onSpeak(`${randomParty} ${chosenHook.calloutSpeech}`);
+
+    setTimeout(() => {
+      onStateChange('detected');
+    }, 1800);
+
+    // 3. Start 10-second countdown for initial hook if no touch
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          onReturnToIdle();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [onReturnToIdle, onSpeak, onStateChange]);
 
   // Speech Recognition setup
   useEffect(() => {
@@ -146,6 +199,12 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
 
   // User answered the dynamic hook question -> Introduce Kaizen now!
   const handleSelectHookOption = (option: DynamicHookOption) => {
+    // Clear 10-second countdown immediately! The user has interacted!
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
     setSelectedOption(option);
     onSpeak(option.reactionSpeech);
 
@@ -160,6 +219,10 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
   };
 
   const handleOpenRecommendedPill = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
     if (selectedOption?.recommendedPillId) {
       const pIdx = KAIZEN_PILLS.findIndex(p => p.id === selectedOption.recommendedPillId);
       if (pIdx !== -1) {
@@ -210,7 +273,13 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
                 {currentHook.badge}
               </span>
               <button
-                onClick={() => setStep('gemini')}
+                onClick={() => {
+                  if (timerRef.current) {
+                    clearInterval(timerRef.current);
+                    timerRef.current = null;
+                  }
+                  setStep('gemini');
+                }}
                 className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition cursor-pointer flex items-center gap-1.5"
               >
                 <Bot className="w-3.5 h-3.5 text-purple-400" />
@@ -221,7 +290,7 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
             <h2 className="text-xl sm:text-2xl font-bold text-white mb-2 tracking-tight">
               {currentHook.question}
             </h2>
-            <p className="text-xs sm:text-sm text-slate-300 mb-5">
+            <p className="text-xs sm:text-sm text-slate-300 mb-4">
               Toque na opção que mais combina com a sua realidade hoje:
             </p>
 
@@ -239,10 +308,26 @@ export function KaizenInteraction({ onSpeak, onStateChange }: KaizenInteractionP
               ))}
             </div>
 
+            {/* Inactivity 10s Countdown Bar */}
+            <div className="mb-3">
+              <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+                <motion.div
+                  className="bg-gradient-to-r from-cyan-400 to-blue-500 h-full"
+                  animate={{ width: `${(countdown / 10) * 100}%` }}
+                  transition={{ duration: 1, ease: "linear" }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1.5">
+                <span>Toque na tela para continuar</span>
+                <span className="text-cyan-400 font-mono">Modo descanso em {countdown}s</span>
+              </div>
+            </div>
+
             <div className="pt-3 border-t border-white/10 flex justify-between items-center text-xs text-slate-400">
               <span>O Sensei está te ouvindo atentamente</span>
               <button
                 onClick={() => {
+                  setCountdown(10);
                   const nextHookIdx = (DYNAMIC_HOOKS.findIndex(h => h.id === currentHook.id) + 1) % DYNAMIC_HOOKS.length;
                   setCurrentHook(DYNAMIC_HOOKS[nextHookIdx]);
                   onSpeak(DYNAMIC_HOOKS[nextHookIdx].calloutSpeech);
